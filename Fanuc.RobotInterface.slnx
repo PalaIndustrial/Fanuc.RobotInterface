@@ -1,5 +1,6 @@
-﻿<Solution>
+<Solution>
   <Project Path="FANUCRobotTest/FANUCRobotTest.csproj" />
+  <Project Path="Fanuc.RobotInterface.Extensions/Fanuc.RobotInterface.Extensions.csproj" />
   <Project Path="Fanuc.RobotInterface/Fanuc.RobotInterface.csproj" />
   <Project Path="Fanuc.SRTP/Fanuc.SRTP.csproj" />
 </Solution>

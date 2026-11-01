@@ -1,5 +1,6 @@
 ﻿using Fanuc.RobotInterface.Collections;
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -9,8 +10,12 @@ using System.Threading.Tasks.Schedulers;
 
 namespace Fanuc.RobotInterface
 {
-    public partial class ExRobotIF : NotifyPropertyBase, IExRobotIF
+    public partial class ExRobotIF : IExRobotIF, INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        private void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
         private readonly IRobotIF _Robot;
 
         private TaskFactory _TaskFactory;
@@ -118,7 +123,7 @@ namespace Fanuc.RobotInterface
                     });
                     _WatcherThread.Start();
                 }
-                RaisePropertyChanged(nameof(IsConnected));
+                OnPropertyChanged(nameof(IsConnected));
             });
         }
 

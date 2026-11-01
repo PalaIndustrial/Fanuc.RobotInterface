@@ -1,5 +1,6 @@
-﻿using Fanuc.RobotInterface.SRTP;
+﻿using Fanuc.SRTP;
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -11,7 +12,7 @@ using System.Threading.Tasks.Schedulers;
 
 namespace Fanuc.RobotInterface
 {
-    public partial class RobotIF : NotifyPropertyBase, IRobotIF
+    public partial class RobotIF : IRobotIF, INotifyPropertyChanged
     {
         public const int DEFAULT_PORT = 60008;
         public const int DEFAULT_TIMEOUT = 10000;
@@ -90,8 +91,10 @@ namespace Fanuc.RobotInterface
                 Disconnect();
                 throw new IOException($"Connecting to {host}:{port} failed.", ex);
             }
-            RaisePropertyChanged(nameof(IsConnected));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsConnected)));
         }
+
+        public event PropertyChangedEventHandler PropertyChanged;
 
         public void Disconnect()
         {
@@ -101,7 +104,7 @@ namespace Fanuc.RobotInterface
                 _Client?.Dispose();
                 _Client = null;
 
-                RaisePropertyChanged(nameof(IsConnected));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsConnected)));
             }
         }
 

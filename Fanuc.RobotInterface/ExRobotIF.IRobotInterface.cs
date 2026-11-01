@@ -1,8 +1,9 @@
-﻿using System.Threading.Tasks.Schedulers;
+﻿using System.ComponentModel;
+using System.Threading.Tasks.Schedulers;
 
 namespace Fanuc.RobotInterface
 {
-    public partial class ExRobotIF : IRobotIF
+    public partial class ExRobotIF : IRobotIF, INotifyPropertyChanged
     {
         public bool IsConnected => _Robot.IsConnected;
 
@@ -18,7 +19,7 @@ namespace Fanuc.RobotInterface
 
                 _TaskFactory = null;
 
-                RaisePropertyChanged(nameof(IsConnected));
+                OnPropertyChanged(nameof(IsConnected));
             }
         }
 

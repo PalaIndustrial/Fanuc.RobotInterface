@@ -1,5 +1,6 @@
 ﻿using Fanuc.RobotInterface.Collections;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Threading.Tasks;
 
@@ -7,7 +8,7 @@ namespace Fanuc.RobotInterface
 {
     public partial class ExRobotIF
     {
-        public abstract class RobotDataHolderBase<T> : NotifyPropertyBase, IValueHolder<T>, IRobotValueHolder
+        public abstract class RobotDataHolderBase<T> : INotifyPropertyChanged, IValueHolder<T>, IRobotValueHolder
         {
             [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             private T _RemoteValue;
@@ -21,7 +22,15 @@ namespace Fanuc.RobotInterface
                 Robot = robot;
             }
 
-            protected virtual void RemoteUpdate(T value) => SetField(ref _RemoteValue, value, nameof(Value));
+            public event PropertyChangedEventHandler PropertyChanged;
+            protected void RaisePropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+            protected virtual void RemoteUpdate(T value)
+            {
+                if (EqualityComparer<T>.Default.Equals(_RemoteValue, value)) return;
+                _RemoteValue = value;
+                RaisePropertyChanged(nameof(Value));
+            }
 
             public void PullValue() => RemoteUpdate(ReadValue());
 
@@ -48,7 +57,11 @@ namespace Fanuc.RobotInterface
             protected void _LocalUpdate(T value)
             {
                 _LocalValue = value;
-                SetField(ref _IsDirty, !Equals(_LocalValue, Value), nameof(IsDirty));
+                if (!Equals(_IsDirty, !Equals(_LocalValue, Value)))
+                {
+                    _IsDirty = !Equals(_LocalValue, Value);
+                    RaisePropertyChanged(nameof(IsDirty));
+                }
             }
 
             protected override void RemoteUpdate(T value)
@@ -63,7 +76,11 @@ namespace Fanuc.RobotInterface
                 if (IsDirty)
                 {
                     WriteValue(_LocalValue);
-                    SetField(ref _IsDirty, false, nameof(IsDirty));
+                    if (_IsDirty)
+                    {
+                        _IsDirty = false;
+                        RaisePropertyChanged(nameof(IsDirty));
+                    }
                 }
             }
 
