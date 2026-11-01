@@ -1,28 +1,16 @@
 ﻿using Fanuc.RobotInterface;
-using Fanuc.RobotInterface.Extensions;
-using Fanuc.SRTP;
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Globalization;
-using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using Wpf.Ui.Appearance;
+using FluentWindow = Wpf.Ui.Controls.FluentWindow;
+using WindowBackdropType = Wpf.Ui.Controls.WindowBackdropType;
 
 namespace FANUCRobotTest.UI
 {
-    public partial class MainWindow : Window
+    public partial class MainWindow : FluentWindow
     {
         public class SettingsT : SettingsBase
         {
@@ -54,6 +42,7 @@ namespace FANUCRobotTest.UI
 
         public MainWindow()
         {
+            SystemThemeWatcher.Watch(this, WindowBackdropType.None);
             InitializeComponent();
             Settings.PropertyChanged += (s, e) => Settings.Save();
         }

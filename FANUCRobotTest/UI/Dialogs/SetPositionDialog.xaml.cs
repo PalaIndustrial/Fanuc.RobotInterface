@@ -1,5 +1,5 @@
 ﻿using Fanuc.RobotInterface;
-using ModernWpf.Controls;
+using Wpf.Ui.Controls;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -32,9 +32,5 @@ namespace FANUCRobotTest.UI
             InitializeComponent();
         }
 
-        private void ContentDialog_CloseButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs e)
-        {
-            e.GetDeferral().Complete();
-        }
     }
 }

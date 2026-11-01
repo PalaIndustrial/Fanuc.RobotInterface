@@ -1,5 +1,6 @@
 ﻿using Fanuc.RobotInterface;
-using ModernWpf.Controls;
+using ContentDialogHost = Wpf.Ui.Controls.ContentDialogHost;
+using ContentDialogResult = Wpf.Ui.Controls.ContentDialogResult;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -377,6 +378,8 @@ namespace FANUCRobotTest.UI
 
                 var dialog = new SetPositionDialog();
                 dialog.DataContext = pos;
+                dialog.DialogHostEx = ContentDialogHost.GetForWindow(Window.GetWindow(this))
+                    ?? throw new InvalidOperationException("The window does not have a content dialog host.");
                 var result = await dialog.ShowAsync();
                 switch (result)
                 {

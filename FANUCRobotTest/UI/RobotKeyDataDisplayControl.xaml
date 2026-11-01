@@ -1,35 +1,37 @@
-﻿<UserControl
-    x:Class="FANUCRobotTest.UI.RobotKeyDataDisplayControl"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:ui="http://schemas.modernwpf.com/2019"
-    xmlns:local="clr-namespace:FANUCRobotTest"
-    xmlns:local_ui="clr-namespace:FANUCRobotTest.UI"    mc:Ignorable="d"
-    d:DesignHeight="450"
-    d:DesignWidth="800">
+﻿<UserControl x:Class="FANUCRobotTest.UI.RobotKeyDataDisplayControl"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:local="clr-namespace:FANUCRobotTest" xmlns:local_ui="clr-namespace:FANUCRobotTest.UI" mc:Ignorable="d"
+        d:DesignHeight="450" d:DesignWidth="800">
 
     <HeaderedContentControl>
         <HeaderedContentControl.Header>
-            <StackPanel Margin="2" Orientation="Horizontal" Background="{DynamicResource SystemControlForegroundBaseLowBrush}">
-                <TextBlock Margin="8,2,2,2" VerticalAlignment="Center" d:Text="SDI:">
-                    <Run Text="{Binding DataName, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:RobotKeyDataDisplayControl}}}" />:
+            <Grid Margin="2" Background="{DynamicResource SubtleFillColorSecondaryBrush}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="TitleLabel" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Margin="8,2" VerticalAlignment="Center" d:Text="SDI:">
+                    <Run
+                            Text="{Binding DataName, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:RobotKeyDataDisplayControl}}}" />:
                 </TextBlock>
-                <TextBox 
-                    Margin="2" Width="420" VerticalContentAlignment="Center" 
-                    ui:ControlHelper.PlaceholderText="Index"
-                    Text="{Binding SelectedDataKey, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:RobotKeyDataDisplayControl}}}" />
-                <Button Margin="2" VerticalAlignment="Center" Content="Add" Click="Button_Add_Click" />
-            </StackPanel>
+                <ui:TextBox Grid.Column="1" Margin="2" Width="420" VerticalContentAlignment="Center"
+                        PlaceholderText="Index"
+                        Text="{Binding SelectedDataKey, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:RobotKeyDataDisplayControl}}}" />
+                <Button Grid.Column="2" Margin="2" VerticalAlignment="Center" Click="Button_Add_Click">
+                    <ui:SymbolIcon Symbol="Add16" />
+                </Button>
+            </Grid>
         </HeaderedContentControl.Header>
-        <ItemsControl
-            Grid.IsSharedSizeScope="True"
-            ItemsPanel="{Binding DataItemsPanel, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:RobotKeyDataDisplayControl}}}"
-            ItemTemplate="{Binding DataItemTemplate, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:RobotKeyDataDisplayControl}}}"
-            ItemTemplateSelector="{Binding DataItemTemplateSelector, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:RobotKeyDataDisplayControl}}}"
-            ItemsSource="{Binding DataItemsSource, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:RobotKeyDataDisplayControl}}}">
+        <ItemsControl Grid.IsSharedSizeScope="True"
+                ItemsPanel="{Binding DataItemsPanel, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:RobotKeyDataDisplayControl}}}"
+                ItemTemplate="{Binding DataItemTemplate, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:RobotKeyDataDisplayControl}}}"
+                ItemTemplateSelector="{Binding DataItemTemplateSelector, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:RobotKeyDataDisplayControl}}}"
+                ItemsSource="{Binding DataItemsSource, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:RobotKeyDataDisplayControl}}}">
         </ItemsControl>
     </HeaderedContentControl>
-    
+
 </UserControl>
