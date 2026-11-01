@@ -1,11 +1,12 @@
-﻿using Newtonsoft.Json;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
+using Newtonsoft.Json;
 using System;
 using System.IO;
 using System.Reflection;
 
 namespace FANUCRobotTest
 {
-    public class SettingsBase : NotifyPropertyBase
+    public class SettingsBase : ObservableObject
     {
         private static JsonSerializerSettings _SerializerSettings = new JsonSerializerSettings()
         {

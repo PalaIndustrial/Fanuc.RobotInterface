@@ -1,4 +1,5 @@
-﻿using Fanuc.RobotInterface;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
+using Fanuc.RobotInterface;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -12,7 +13,7 @@ using System.Threading.Tasks;
 
 namespace FANUCRobotTest
 {
-    public partial class OfficialIF : NotifyPropertyBase, IRobotIF
+    public partial class OfficialIF : ObservableObject, IRobotIF
     {
         static OfficialIF()
         {
@@ -45,7 +46,7 @@ namespace FANUCRobotTest
 
             if (!_Core.Connect(host))
                 throw new IOException($"Connecting to {host}:{port} failed ({_Core.DebugMessage})");
-            RaisePropertyChanged(nameof(IsConnected));
+            OnPropertyChanged(nameof(IsConnected));
         }
 
         public void Disconnect()
@@ -55,7 +56,7 @@ namespace FANUCRobotTest
                 try { _Core?.DataTable?.Clear(); } catch { }
                 try { _Core?.DataTable2?.Clear(); } catch { }
                 _Host = null;
-                RaisePropertyChanged(nameof(IsConnected));
+                OnPropertyChanged(nameof(IsConnected));
             }
         }
 

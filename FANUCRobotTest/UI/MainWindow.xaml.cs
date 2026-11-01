@@ -1,5 +1,6 @@
 ﻿using Fanuc.RobotInterface;
-using Fanuc.RobotInterface.SRTP;
+using Fanuc.RobotInterface.Extensions;
+using Fanuc.SRTP;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -28,14 +29,14 @@ namespace FANUCRobotTest.UI
             [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             private double _Width, _Height;
             [DefaultValue(800.0)]
-            public double Width { get => _Width; set => SetField(ref _Width, value); }
+            public double Width { get => _Width; set => SetProperty(ref _Width, value); }
             [DefaultValue(450.0)]
-            public double Height { get => _Height; set => SetField(ref _Height, value); }
+            public double Height { get => _Height; set => SetProperty(ref _Height, value); }
 
             [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             WindowState _WindowState;
             [DefaultValue(WindowState.Normal)]
-            public WindowState WindowState { get => _WindowState; set => SetField(ref _WindowState, value); }
+            public WindowState WindowState { get => _WindowState; set => SetProperty(ref _WindowState, value); }
 
             public SettingsT(string filename) : base(filename)
             {

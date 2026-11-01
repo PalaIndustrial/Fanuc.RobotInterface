@@ -58,37 +58,37 @@ namespace FANUCRobotTest.UI
             public SettingsT(string filename) :
                 base(filename)
             {
-                SDI.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(SDI));
-                SDO.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(SDO));
-                RDI.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(RDI));
-                RDO.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(RDO));
-                UI.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(UI));
-                UO.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(UO));
-                SI.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(SI));
-                SO.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(SO));
-                WI.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(WI));
-                WO.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(WO));
-                WSI.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(WSI));
-                PMC_K.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(PMC_K));
-                PMC_R.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(PMC_R));
+                SDI.CollectionChanged += (s, e) => OnPropertyChanged(nameof(SDI));
+                SDO.CollectionChanged += (s, e) => OnPropertyChanged(nameof(SDO));
+                RDI.CollectionChanged += (s, e) => OnPropertyChanged(nameof(RDI));
+                RDO.CollectionChanged += (s, e) => OnPropertyChanged(nameof(RDO));
+                UI.CollectionChanged += (s, e) => OnPropertyChanged(nameof(UI));
+                UO.CollectionChanged += (s, e) => OnPropertyChanged(nameof(UO));
+                SI.CollectionChanged += (s, e) => OnPropertyChanged(nameof(SI));
+                SO.CollectionChanged += (s, e) => OnPropertyChanged(nameof(SO));
+                WI.CollectionChanged += (s, e) => OnPropertyChanged(nameof(WI));
+                WO.CollectionChanged += (s, e) => OnPropertyChanged(nameof(WO));
+                WSI.CollectionChanged += (s, e) => OnPropertyChanged(nameof(WSI));
+                PMC_K.CollectionChanged += (s, e) => OnPropertyChanged(nameof(PMC_K));
+                PMC_R.CollectionChanged += (s, e) => OnPropertyChanged(nameof(PMC_R));
 
-                GI.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(GI));
-                GO.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(GO));
-                AI.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(AI));
-                AO.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(AO));
-                PMC_D.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(PMC_D));
+                GI.CollectionChanged += (s, e) => OnPropertyChanged(nameof(GI));
+                GO.CollectionChanged += (s, e) => OnPropertyChanged(nameof(GO));
+                AI.CollectionChanged += (s, e) => OnPropertyChanged(nameof(AI));
+                AO.CollectionChanged += (s, e) => OnPropertyChanged(nameof(AO));
+                PMC_D.CollectionChanged += (s, e) => OnPropertyChanged(nameof(PMC_D));
 
-                R.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(R));
-                PR.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(PR));
-                SR.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(SR));
+                R.CollectionChanged += (s, e) => OnPropertyChanged(nameof(R));
+                PR.CollectionChanged += (s, e) => OnPropertyChanged(nameof(PR));
+                SR.CollectionChanged += (s, e) => OnPropertyChanged(nameof(SR));
 
-                SysVarI.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(SysVarI));
-                SysVarP.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(SysVarP));
-                SysVarS.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(SysVarS));
+                SysVarI.CollectionChanged += (s, e) => OnPropertyChanged(nameof(SysVarI));
+                SysVarP.CollectionChanged += (s, e) => OnPropertyChanged(nameof(SysVarP));
+                SysVarS.CollectionChanged += (s, e) => OnPropertyChanged(nameof(SysVarS));
 
-                POS.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(POS));
-                PRG.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(PRG));
-                ALM.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(ALM));
+                POS.CollectionChanged += (s, e) => OnPropertyChanged(nameof(POS));
+                PRG.CollectionChanged += (s, e) => OnPropertyChanged(nameof(PRG));
+                ALM.CollectionChanged += (s, e) => OnPropertyChanged(nameof(ALM));
             }
         }
 
