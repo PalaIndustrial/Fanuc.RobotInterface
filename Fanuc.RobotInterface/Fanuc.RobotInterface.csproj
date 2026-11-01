@@ -23,4 +23,8 @@
     <Reference Include="System.Net.Http" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Fanuc.SRTP\Fanuc.SRTP.csproj" />
+  </ItemGroup>
+
 </Project>
