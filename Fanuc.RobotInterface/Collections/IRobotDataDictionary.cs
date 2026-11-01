@@ -1,11 +1,10 @@
 ﻿using System.Collections.Generic;
 
-namespace Fanuc.RobotInterface.Collections
+namespace Fanuc.RobotInterface.Collections;
+
+public interface IRobotDataDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, TValue>
 {
-    public interface IRobotDataDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, TValue>
-    {
-        TValue GetOrAdd(TKey key);
-        bool Remove(TKey key);
-        void Clear();
-    }
+    TValue GetOrAdd(TKey key);
+    bool Remove(TKey key);
+    void Clear();
 }
