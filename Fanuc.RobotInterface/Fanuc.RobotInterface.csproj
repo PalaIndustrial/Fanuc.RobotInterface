@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>net48;net6.0</TargetFrameworks>
@@ -7,6 +7,8 @@
     <AllowUnsafeBlocks>False</AllowUnsafeBlocks>
     <Platforms>AnyCPU</Platforms>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+  </PropertyGroup>
+  <PropertyGroup>
     <Title>Fanuc RobotInterface</Title>
     <Authors>Victor Tseng</Authors>
     <Description>Open source implentation for Fanuc RobotInterface.</Description>
