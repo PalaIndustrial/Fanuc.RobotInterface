@@ -7,6 +7,7 @@
     <AllowUnsafeBlocks>False</AllowUnsafeBlocks>
     <Platforms>AnyCPU</Platforms>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
   <PropertyGroup>
     <Title>Fanuc RobotInterface</Title>
