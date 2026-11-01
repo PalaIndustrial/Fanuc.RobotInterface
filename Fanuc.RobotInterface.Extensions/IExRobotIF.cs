@@ -1,4 +1,4 @@
-﻿using Fanuc.RobotInterface.Collections;
+using Fanuc.RobotInterface.Collections;
 using System.Threading.Tasks;
 
 namespace Fanuc.RobotInterface

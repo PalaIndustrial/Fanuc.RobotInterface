@@ -1,4 +1,3 @@
-﻿using Fanuc.RobotInterface.Collections;
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -7,6 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Schedulers;
+using Fanuc.RobotInterface.Collections;
 
 namespace Fanuc.RobotInterface
 {
