@@ -1,6 +1,6 @@
 <Project>
 	<PropertyGroup>
-		<SharedVersion>3.0.3</SharedVersion>
+		<SharedVersion>3.0.4</SharedVersion>
 		<LibraryRevision Condition="'$(MSBuildProjectName)' == 'Fanuc.SRTP'">0</LibraryRevision>
 		<LibraryRevision Condition="'$(MSBuildProjectName)' == 'Fanuc.RobotInterface'">0</LibraryRevision>
 		<LibraryRevision Condition="'$(MSBuildProjectName)' == 'Fanuc.RobotInterface.Extensions'">0</LibraryRevision>
@@ -26,4 +26,11 @@
 	<ItemGroup Condition="'$(LibraryRevision)' != ''">
 		<None Include="$(MSBuildThisFileDirectory)README.md" Pack="True" PackagePath="\" Visible="False" />
 	</ItemGroup>
+
+	<Target Name="CopyPackagesToSolutionBin" AfterTargets="Pack" Condition="'$(LibraryRevision)' != '' and '$(IsPackable)' == 'true'">
+		<ItemGroup>
+			<_SolutionPackage Include="@(NuGetPackOutput)" Condition="'%(Extension)' == '.nupkg' or '%(Extension)' == '.snupkg'" />
+		</ItemGroup>
+		<Copy SourceFiles="@(_SolutionPackage)" DestinationFolder="$(MSBuildThisFileDirectory)bin\$(Configuration)" SkipUnchangedFiles="true" />
+	</Target>
 </Project>
