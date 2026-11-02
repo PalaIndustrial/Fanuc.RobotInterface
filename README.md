@@ -15,7 +15,7 @@ A library that allows you to connect to FANUC industrial robot arm. Should work 
 - R-30iB All Versions (**)
 - R-30iB Plus All Versions (**)
 
-** One of the following is requred on these controller
+** One of the following options is required on these controllers:
 - R650 "FRA Params" + R553 "HMI Device (SNPX)"
 - R651 "FRL Params"
 
