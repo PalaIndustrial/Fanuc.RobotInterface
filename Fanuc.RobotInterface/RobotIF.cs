@@ -1,4 +1,4 @@
-﻿using Fanuc.SRTP;
+using Fanuc.SRTP;
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -111,9 +111,23 @@ namespace Fanuc.RobotInterface
         public void ClearAlarm() => WriteCommand("CLRALM");
         public void ResetAlarm() => ExecuteKCL("reset");
 
-        private static readonly Regex sKclSuccessPattern = new Regex(@"<BODY.*>.*<XMP.*>\s*(?<XMP>.*)\s*</\s*XMP>.*</\s*BODY>", RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase);
-        private static readonly Regex sKclFailPatter = new Regex(@"<BODY.*>.*ERROR:\s*([^<]*)\s*.*</\s*BODY>", RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase);
-        private HttpClient _HttpClient = new HttpClient();
+
+        private const string KclSuccessRegexPattern = @"<BODY.*>.*<XMP.*>\s*(?<XMP>.*)\s*</\s*XMP>.*</\s*BODY>";
+        private const string KclFailRegexPattern = @"<BODY.*>.*ERROR:\s*([^<]*)\s*.*</\s*BODY>";
+
+#if NET7_0_OR_GREATER
+        [GeneratedRegex(KclSuccessRegexPattern)]
+        private static partial Regex GetKclSuccessRegex();
+        [GeneratedRegex(KclFailRegexPattern)]
+        private static partial Regex GetKclFailRegex();
+
+#else
+        private static readonly Lazy<Regex> CachedKclSuccessRegex = new(() => new Regex(KclSuccessRegexPattern, RegexOptions.Compiled));
+        private static readonly Lazy<Regex> CachedKclFailRegex = new(() => new Regex(KclFailRegexPattern, RegexOptions.Compiled));
+
+        private static Regex GetKclSuccessRegex() => CachedKclSuccessRegex.Value;
+        private static Regex GetKclFailRegex() => CachedKclFailRegex.Value;
+#endif
 
         public string ExecuteKCL(string command)
         {
@@ -121,14 +135,14 @@ namespace Fanuc.RobotInterface
             response.EnsureSuccessStatusCode();
 
             var content = response.Content.ReadAsStringAsync().Result;
-            var m = sKclSuccessPattern.Match(content);
+            var m = GetKclSuccessRegex().Match(content);
             if (m.Success)
             {
                 return m.Groups["XMP"].Value;
             }
             else
             {
-                var mm = sKclFailPatter.Match(content);
+                var mm = GetKclFailRegex().Match(content);
                 if (m.Success)
                     throw new IOException($"Executing KCL \"{command}\" failed: {mm.Groups[1].Value}");
             }
