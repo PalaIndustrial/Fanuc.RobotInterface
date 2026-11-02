@@ -1,22 +1,21 @@
-﻿namespace Fanuc.RobotInterface
+﻿namespace Fanuc.RobotInterface;
+
+public interface IValueHolder
 {
-    public interface IValueHolder
-    {
-        object Value { get; }
-    }
+    object Value { get; }
+}
 
-    public interface IWritableValueHolder : IValueHolder
-    {
-        new object Value { get; set; }
-    }
+public interface IWritableValueHolder : IValueHolder
+{
+    new object Value { get; set; }
+}
 
-    public interface IValueHolder<T> : IValueHolder
-    {
-        new T Value { get; }
-    }
+public interface IValueHolder<T> : IValueHolder
+{
+    new T Value { get; }
+}
 
-    public interface IWritableValueHolder<T> : IValueHolder<T>, IWritableValueHolder
-    {
-        new T Value { get; set; }
-    }
+public interface IWritableValueHolder<T> : IValueHolder<T>, IWritableValueHolder
+{
+    new T Value { get; set; }
 }
