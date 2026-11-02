@@ -1,14 +1,12 @@
-using Fanuc.SRTP;
+﻿using Fanuc.SRTP;
 using System;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks.Schedulers;
 
 namespace Fanuc.RobotInterface
 {
@@ -17,16 +15,12 @@ namespace Fanuc.RobotInterface
         public const int DEFAULT_PORT = 60008;
         public const int DEFAULT_TIMEOUT = 10000;
 
-        private TcpClient _Client;
+        private TcpClient TcpClient;
 
-        public bool IsConnected => _Client?.Connected ?? false;
+        public bool IsConnected => TcpClient?.Connected ?? false;
 
-        private byte _SequenceNumber;
-        private string _Host;
-
-        public RobotIF()
-        {
-        }
+        private byte SequenceNumber;
+        private string Host;
 
         public void Connect(string host, ushort port, int timeout)
         {
@@ -45,15 +39,15 @@ namespace Fanuc.RobotInterface
                 client.Client.NoDelay = true;
                 client.Connect(host, port);
 
-                _Client = client;
-                _Host = host;
+                TcpClient = client;
+                Host = host;
 
-                _SequenceNumber = 0;
+                SequenceNumber = 0;
 
                 {
-                    var rr = _SendReceive(new ShortRequestPacket()
+                    var rr = SendReceiveInternal(new ShortRequestPacket()
                     {
-                        SequenceNumber = _SequenceNumber++,
+                        SequenceNumber = SequenceNumber++,
                         PacketType = PacketType.INIT,
                         MessageType = 0,
                         Unknown_8 = 0,
@@ -66,10 +60,10 @@ namespace Fanuc.RobotInterface
                 }
 
                 {
-                    var rr = _SendReceive(new ShortRequestPacket()
+                    var rr = SendReceiveInternal(new ShortRequestPacket()
                     {
                         PacketType = PacketType.UNKNOWN_8,
-                        SequenceNumber = _SequenceNumber++,
+                        SequenceNumber = SequenceNumber++,
 
                         MailboxSource = 0x00000000,         // FIXME: magic!
                         MailboxDestination = 0x00000e10,    // FIXME: magic!
@@ -100,9 +94,9 @@ namespace Fanuc.RobotInterface
         {
             if (IsConnected)
             {
-                _Client?.Close();
-                _Client?.Dispose();
-                _Client = null;
+                TcpClient?.Close();
+                TcpClient?.Dispose();
+                TcpClient = null;
 
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsConnected)));
             }
@@ -129,9 +123,11 @@ namespace Fanuc.RobotInterface
         private static Regex GetKclFailRegex() => CachedKclFailRegex.Value;
 #endif
 
+        private HttpClient _HttpClient = new();
+
         public string ExecuteKCL(string command)
         {
-            var response = _HttpClient.GetAsync($"http://{_Host}/KCL/{command}").Result;
+            var response = _HttpClient.GetAsync($"http://{Host}/KCL/{command}").Result;
             response.EnsureSuccessStatusCode();
 
             var content = response.Content.ReadAsStringAsync().Result;
@@ -151,19 +147,19 @@ namespace Fanuc.RobotInterface
 
         public string ExecuteKarel(string program)
         {
-            var response = _HttpClient.GetAsync($"http://{_Host}/KAREL/{program}").Result;
+            var response = _HttpClient.GetAsync($"http://{Host}/KAREL/{program}").Result;
             response.EnsureSuccessStatusCode();
 
             return response.Content.ReadAsStringAsync().Result;
         }
 
         #region IO
-        private bool[] _ReadDIO(SegmentSelector selector, int index, ushort count)
+        internal bool[] ReadDIO(SegmentSelector selector, int index, ushort count)
         {
             if (index < 1)
                 throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
             if (count < 1)
-                return Array.Empty<bool>();
+                return [];
 
             --index;
             var first = index / 8 * 8;
@@ -173,9 +169,9 @@ namespace Fanuc.RobotInterface
             if (len > ushort.MaxValue)
                 throw new ArgumentOutOfRangeException(nameof(count), $"Cannot read {count} inputs at {index}");
 
-            var rr = _SendReceive(new ShortRequestPacket()
+            var rr = SendReceiveInternal(new ShortRequestPacket()
             {
-                SequenceNumber = _SequenceNumber++,
+                SequenceNumber = SequenceNumber++,
 
                 MailboxSource = 0x00000000,         // FIXME: magic!
                 MailboxDestination = 0x00000e10,    // FIXME: magic!
@@ -206,20 +202,20 @@ namespace Fanuc.RobotInterface
 
             return values;
         }
-        public bool[] ReadDI(int index, ushort count) => _ReadDIO(SegmentSelector.BIT_Q, index, count);
-        public bool[] ReadDO(int index, ushort count) => _ReadDIO(SegmentSelector.BIT_I, index, count);
+        public bool[] ReadDI(int index, ushort count) => ReadDIO(SegmentSelector.BIT_Q, index, count);
+        public bool[] ReadDO(int index, ushort count) => ReadDIO(SegmentSelector.BIT_I, index, count);
 
-        private ushort[] _ReadGIO(SegmentSelector selector, int index, ushort count)
+        private ushort[] ReadGIO(SegmentSelector selector, int index, ushort count)
         {
             if (index < 1)
                 throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
             if (count < 1)
-                return Array.Empty<ushort>();
+                return [];
 
             --index;
-            var rr = _SendReceive(new ShortRequestPacket()
+            var rr = SendReceiveInternal(new ShortRequestPacket()
             {
-                SequenceNumber = _SequenceNumber++,
+                SequenceNumber = SequenceNumber++,
 
                 MailboxSource = 0x00000000,         // FIXME: magic!
                 MailboxDestination = 0x00000e10,    // FIXME: magic!
@@ -243,10 +239,10 @@ namespace Fanuc.RobotInterface
                 values[i] = (ushort)((rr.ActualPayload[i * 2 + 1] << 8) | rr.ActualPayload[i * 2]);
             return values;
         }
-        public ushort[] ReadGI(int index, ushort count) => _ReadGIO(SegmentSelector.WORD_AQ, index, count);
-        public ushort[] ReadGO(int index, ushort count) => _ReadGIO(SegmentSelector.WORD_AI, index, count);
+        public ushort[] ReadGI(int index, ushort count) => ReadGIO(SegmentSelector.WORD_AQ, index, count);
+        public ushort[] ReadGO(int index, ushort count) => ReadGIO(SegmentSelector.WORD_AI, index, count);
 
-        private void _WriteDIO(SegmentSelector selector, int index, params bool[] values)
+        private void WriteDIO(SegmentSelector selector, int index, params bool[] values)
         {
             if (index < 1)
                 throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
@@ -255,15 +251,33 @@ namespace Fanuc.RobotInterface
             if (count < 1)
                 return; // nothing to write
 
-            --index;
-            var first = index / 8 * 8;
-            var last = (index + count + 7) / 8 * 8;
+            var start = (long)index - 1;
+            var first = start / 8 * 8;
+            var last = (start + count + 7) / 8 * 8;
             var len = last - first;
+            if (last > (long)ushort.MaxValue + 1 || len > ushort.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(values), "The aligned write exceeds the addressable range.");
 
-            var front = index - first;
-            var back = len - count - front;
-
-            var bools = new bool[front].Concat(values).Concat(new bool[back]).ToArray();
+            var front = (int)(start - first);
+            var back = (int)(last - start - count);
+            var bools = new bool[(int)len];
+            Array.Copy(values, 0, bools, front, count);
+            if (front > 0)
+            {
+                var existing = ReadDIO(selector, (int)first + 1, 8);
+                if (existing.Length != 8)
+                    throw new IOException($"Read {selector} returned insufficient data for the write.");
+                Array.Copy(existing, 0, bools, 0, front);
+                if (back > 0 && len == 8)
+                    Array.Copy(existing, 8 - back, bools, bools.Length - back, back);
+            }
+            if (back > 0 && (front == 0 || len != 8))
+            {
+                var existing = ReadDIO(selector, (int)last - 7, 8);
+                if (existing.Length != 8)
+                    throw new IOException($"Read {selector} returned insufficient data for the write.");
+                Array.Copy(existing, 8 - back, bools, bools.Length - back, back);
+            }
             var bytes = new byte[len / 8];
             for (int i = 0; i < bools.Length; i += 8)
                 bytes[i / 8] = (byte)(
@@ -277,10 +291,10 @@ namespace Fanuc.RobotInterface
                     (bools[i + 7] ? 0x80 : 0x00)
                 );
 
-            var req = (bytes.Length <= 6) ?
-                (IRequestPacket)new ShortRequestPacket()
+            var rr = SendReceiveInternal((bytes.Length <= 6)
+                ? new ShortRequestPacket()
                 {
-                    SequenceNumber = _SequenceNumber++,
+                    SequenceNumber = SequenceNumber++,
 
                     MailboxSource = 0x00000000,         // FIXME: magic!
                     MailboxDestination = 0x00000e10,    // FIXME: magic!
@@ -290,14 +304,14 @@ namespace Fanuc.RobotInterface
                     ServiceRequestCode = ServiceRequestCode.WRITE_SYS_MEM,
                     SegmentSelector = selector,
 
-                    Index = (ushort)index,
-                    Count = (ushort)count,
+                    Index = (ushort)first,
+                    Count = (ushort)len,
 
                     Payload = bytes,
-                } :
-                (IRequestPacket)new ExtendedRequestPacket()
+                }
+                : new ExtendedRequestPacket()
                 {
-                    SequenceNumber = _SequenceNumber++,
+                    SequenceNumber = SequenceNumber++,
 
                     MailboxSource = 0x00000000,         // FIXME: magic!
                     MailboxDestination = 0x00000e10,    // FIXME: magic!
@@ -307,22 +321,21 @@ namespace Fanuc.RobotInterface
                     ServiceRequestCode = ServiceRequestCode.WRITE_SYS_MEM,
                     SegmentSelector = selector,
 
-                    Index = (ushort)index,
-                    Count = (ushort)count,
+                    Index = (ushort)first,
+                    Count = (ushort)len,
 
                     ExtraPayload = bytes,
-                };
-            var rr = _SendReceive(req);
+                });
 
             // TODO: validate received packet
             if (rr.MessageType == MessageType.SHORT_FAILED)
                 throw new IOException($"Write {selector} error! Wrong data received, check your request.");
         }
 
-        public void WriteDI(int index, params bool[] values) => _WriteDIO(SegmentSelector.BIT_Q, index, values);
-        public void WriteDO(int index, params bool[] values) => _WriteDIO(SegmentSelector.BIT_I, index, values);
+        public void WriteDI(int index, params bool[] values) => WriteDIO(SegmentSelector.BIT_Q, index, values);
+        public void WriteDO(int index, params bool[] values) => WriteDIO(SegmentSelector.BIT_I, index, values);
 
-        private void _WriteGIO(SegmentSelector selector, int index, params ushort[] values)
+        private void WriteGIO(SegmentSelector selector, int index, params ushort[] values)
         {
             if (index < 1)
                 throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
@@ -331,13 +344,16 @@ namespace Fanuc.RobotInterface
             if (count < 1)
                 return; // nothing to write
 
+            if ((long)index - 1 + count > (long)ushort.MaxValue + 1 || count > ushort.MaxValue / 2)
+                throw new ArgumentOutOfRangeException(nameof(values), "The write exceeds the addressable range or payload size.");
+
             --index;
             var bytes = values.SelectMany(v => new byte[] { (byte)(v & 0xff), (byte)((v >> 8) & 0xff) }).ToArray();
 
-            var req = (bytes.Length <= 6) ?
-                (IRequestPacket)new ShortRequestPacket()
+            var rr = SendReceiveInternal((bytes.Length <= 6)
+                ? new ShortRequestPacket()
                 {
-                    SequenceNumber = _SequenceNumber++,
+                    SequenceNumber = SequenceNumber++,
 
                     MailboxSource = 0x00000000,         // FIXME: magic!
                     MailboxDestination = 0x00000e10,    // FIXME: magic!
@@ -351,10 +367,10 @@ namespace Fanuc.RobotInterface
                     Count = (ushort)count,
 
                     Payload = bytes,
-                } :
-                (IRequestPacket)new ExtendedRequestPacket()
+                }
+                : new ExtendedRequestPacket()
                 {
-                    SequenceNumber = _SequenceNumber++,
+                    SequenceNumber = SequenceNumber++,
 
                     MailboxSource = 0x00000000,         // FIXME: magic!
                     MailboxDestination = 0x00000e10,    // FIXME: magic!
@@ -368,15 +384,14 @@ namespace Fanuc.RobotInterface
                     Count = (ushort)count,
 
                     ExtraPayload = bytes,
-                };
-            var rr = _SendReceive(req);
+                });
 
             // TODO: validate received packet
             if (rr.MessageType == MessageType.SHORT_FAILED)
                 throw new IOException($"Write {selector} error! Wrong data received, check your request.");
         }
-        public void WriteGI(int index, params ushort[] values) => _WriteGIO(SegmentSelector.WORD_AQ, index, values);
-        public void WriteGO(int index, params ushort[] values) => _WriteGIO(SegmentSelector.WORD_AI, index, values);
+        public void WriteGI(int index, params ushort[] values) => WriteGIO(SegmentSelector.WORD_AQ, index, values);
+        public void WriteGO(int index, params ushort[] values) => WriteGIO(SegmentSelector.WORD_AI, index, values);
         #endregion
 
         #region DataTable
@@ -389,10 +404,10 @@ namespace Fanuc.RobotInterface
                 throw new IOException("Cannot send empty command.");
 
             var bytes = Encoding.ASCII.GetBytes(command);
-            var req = (bytes.Length <= 6) ?
-                (IRequestPacket)new ShortRequestPacket()
+            var rr = SendReceiveInternal((bytes.Length <= 6)
+                ? new ShortRequestPacket()
                 {
-                    SequenceNumber = _SequenceNumber++,
+                    SequenceNumber = SequenceNumber++,
 
                     MailboxSource = 0x00000000,         // FIXME: magic!
                     MailboxDestination = 0x00000e10,    // FIXME: magic!
@@ -406,10 +421,10 @@ namespace Fanuc.RobotInterface
                     Count = (ushort)bytes.Length,
 
                     Payload = bytes,
-                } :
-                (IRequestPacket)new ExtendedRequestPacket()
+                }
+                : new ExtendedRequestPacket()
                 {
-                    SequenceNumber = _SequenceNumber++,
+                    SequenceNumber = SequenceNumber++,
 
                     MailboxSource = 0x00000000,         // FIXME: magic!
                     MailboxDestination = 0x00000e10,    // FIXME: magic!
@@ -423,8 +438,7 @@ namespace Fanuc.RobotInterface
                     Count = (ushort)bytes.Length,
 
                     ExtraPayload = bytes,
-                };
-            var rr = _SendReceive(req);
+                });
 
             // TODO: validate received packet
             if (rr.MessageType == MessageType.SHORT_FAILED)
@@ -441,10 +455,10 @@ namespace Fanuc.RobotInterface
                 throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
             --index;
 
-            var req = (values.Length <= 6) ?
-                (IRequestPacket)new ShortRequestPacket()
+            var rr = SendReceiveInternal((values.Length <= 6)
+                ? new ShortRequestPacket()
                 {
-                    SequenceNumber = _SequenceNumber++,
+                    SequenceNumber = SequenceNumber++,
 
                     MailboxSource = 0x00000000,         // FIXME: magic!
                     MailboxDestination = 0x00000e10,    // FIXME: magic!
@@ -458,10 +472,10 @@ namespace Fanuc.RobotInterface
                     Count = (ushort)(values.Length / 2),
 
                     Payload = values,
-                } :
-                (IRequestPacket)new ExtendedRequestPacket()
+                }
+                : new ExtendedRequestPacket()
                 {
-                    SequenceNumber = _SequenceNumber++,
+                    SequenceNumber = SequenceNumber++,
 
                     MailboxSource = 0x00000000,         // FIXME: magic!
                     MailboxDestination = 0x00000e10,    // FIXME: magic!
@@ -475,8 +489,7 @@ namespace Fanuc.RobotInterface
                     Count = (ushort)(values.Length / 2),
 
                     ExtraPayload = values,
-                };
-            var rr = _SendReceive(req);
+                });
 
             // TODO: validate received packet
             if (rr.MessageType == MessageType.SHORT_FAILED)
@@ -488,13 +501,13 @@ namespace Fanuc.RobotInterface
             if (index < 1)
                 throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
             if (count < 1)
-                return Array.Empty<byte>();
+                return [];
 
             --index;
 
-            var req = new ShortRequestPacket()
+            var rr = SendReceiveInternal(new ShortRequestPacket()
             {
-                SequenceNumber = _SequenceNumber++,
+                SequenceNumber = SequenceNumber++,
 
                 MailboxSource = 0x00000000,         // FIXME: magic!
                 MailboxDestination = 0x00000e10,    // FIXME: magic!
@@ -506,53 +519,46 @@ namespace Fanuc.RobotInterface
 
                 Index = (ushort)index,
                 Count = (ushort)(count / 2),
-            };
-            var rr = _SendReceive(req);
+            });
 
             // TODO: validate received packet
             if (rr.MessageType == MessageType.SHORT_FAILED)
                 throw new IOException($"Read {SegmentSelector.WORD_R} error! Wrong data received, check your request.");
 
-            return rr.ActualPayload.Take(count).ToArray();
+            return [.. rr.ActualPayload.Take(count)];
         }
         #endregion
 
-        private void _Send(IRequestPacket packet) => _Client?.Client?.Send(packet.GetBytes());
+        private void SendInternal(IRequestPacket packet) => TcpClient?.Client?.Send(packet.GetBytes());
 
-        private byte[] _HeaderBuffer = new byte[PacketBase.HEADER_LENGTH];
-        private byte[] _PayloadBuffer = Array.Empty<byte>();
+        private byte[] HeaderBuffer = new byte[PacketBase.HEADER_LENGTH];
+        private byte[] PayloadBuffer = [];
 
-        private byte[] _Receive()
+        private byte[] ReceiveInternal()
         {
             // Header
-            var hn = _Client.Client.Receive(_HeaderBuffer, PacketBase.HEADER_LENGTH, SocketFlags.None);
+            var hn = TcpClient.Client.Receive(HeaderBuffer, PacketBase.HEADER_LENGTH, SocketFlags.None);
             if (hn != PacketBase.HEADER_LENGTH)
                 throw new IOException($"Error receiving header, want {PacketBase.HEADER_LENGTH} bytes, got {hn} only.");
 
             // Payload
-            var xlen = PacketBase.ExtraLengthFromHeaderBuffer(_HeaderBuffer);
-            if (_PayloadBuffer.Length < xlen)
-                _PayloadBuffer = new byte[xlen];
+            var xlen = PacketBase.ExtraLengthFromHeaderBuffer(HeaderBuffer);
+            if (PayloadBuffer.Length < xlen)
+                PayloadBuffer = new byte[xlen];
 
             var offset = 0;
             while (xlen != offset)
-                offset += _Client.Client.Receive(_PayloadBuffer, offset, xlen - offset, SocketFlags.None);
-            return _HeaderBuffer.Concat(_PayloadBuffer.Take(xlen)).ToArray();
+                offset += TcpClient.Client.Receive(PayloadBuffer, offset, xlen - offset, SocketFlags.None);
+            return [.. HeaderBuffer, .. PayloadBuffer.Take(xlen)];
         }
 
-        private IResponsePacket _SendReceive(IRequestPacket packet)
+        private IResponsePacket SendReceiveInternal(IRequestPacket packet)
         {
-            //#if DEBUG
-            //            var sw = Stopwatch.StartNew();
-            //#endif
-            _Send(packet);
-            var r = _Receive();
-            var rr = r.Length <= PacketBase.HEADER_LENGTH ? (IResponsePacket)new ShortResponsePacket(r) : (IResponsePacket)new ExtendedResponsePacket(r);
-            //#if DEBUG
-            //            sw.Stop();
-            //            Debug.WriteLine($"{DateTime.Now:yyyy/MM/dd hh:mm:ss.fff}: Receiving {rr.Header.Length + rr.ExtraPayload.Length} took {sw.ElapsedMilliseconds}ms");
-            //#endif
-            return rr;
+            SendInternal(packet);
+            var received = ReceiveInternal();
+            return received.Length <= PacketBase.HEADER_LENGTH
+                ? new ShortResponsePacket(received)
+                : new ExtendedResponsePacket(received);
         }
     }
 }
