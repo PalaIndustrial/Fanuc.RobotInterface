@@ -1,0 +1,29 @@
+<Project>
+	<PropertyGroup>
+		<SharedVersion>3.0.3</SharedVersion>
+		<LibraryRevision Condition="'$(MSBuildProjectName)' == 'Fanuc.SRTP'">0</LibraryRevision>
+		<LibraryRevision Condition="'$(MSBuildProjectName)' == 'Fanuc.RobotInterface'">0</LibraryRevision>
+		<LibraryRevision Condition="'$(MSBuildProjectName)' == 'Fanuc.RobotInterface.Extensions'">0</LibraryRevision>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(LibraryRevision)' != ''">
+		<Version>$(SharedVersion).$(LibraryRevision)</Version>
+		
+		<Authors>Victor Tseng</Authors>
+		<Description>Open source implentation for Fanuc RobotInterface.</Description>
+		<RepositoryUrl>https://github.com/Palatis/Fanuc.RobotInterface</RepositoryUrl>
+		<PackageLicenseExpression>BSD-3-Clause</PackageLicenseExpression>
+		<SignAssembly>False</SignAssembly>
+		<PackageProjectUrl>https://github.com/Palatis/FANUC.RobotInterface</PackageProjectUrl>
+		<AssemblyVersion>$(Version)</AssemblyVersion>
+		<FileVersion>$(Version)</FileVersion>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+
+		<SignAssembly>True</SignAssembly>
+		<AssemblyOriginatorKeyFile>C:\Users\Palatis\.dotnet\Palatis.snk</AssemblyOriginatorKeyFile>
+	</PropertyGroup>
+
+	<ItemGroup Condition="'$(LibraryRevision)' != ''">
+		<None Include="$(MSBuildThisFileDirectory)README.md" Pack="True" PackagePath="\" Visible="False" />
+	</ItemGroup>
+</Project>

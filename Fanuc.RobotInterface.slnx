@@ -1,4 +1,8 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="Directory.Build.props" />
+    <File Path="README.md" />
+  </Folder>
   <Project Path="FANUCRobotTest/FANUCRobotTest.csproj" />
   <Project Path="Fanuc.RobotInterface.Extensions/Fanuc.RobotInterface.Extensions.csproj" />
   <Project Path="Fanuc.RobotInterface/Fanuc.RobotInterface.csproj" />

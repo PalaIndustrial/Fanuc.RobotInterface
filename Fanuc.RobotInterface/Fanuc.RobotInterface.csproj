@@ -1,33 +1,24 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFrameworks>net48;netstandard2.0;net10.0</TargetFrameworks>
-    <ImplicitUsings>disable</ImplicitUsings>
-    <Nullable>disable</Nullable>
-    <AllowUnsafeBlocks>False</AllowUnsafeBlocks>
-    <Platforms>AnyCPU</Platforms>
-    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-    <LangVersion>latest</LangVersion>
-  </PropertyGroup>
-  <PropertyGroup>
-    <Title>Fanuc RobotInterface</Title>
-    <Authors>Victor Tseng</Authors>
-    <Description>Open source implentation for Fanuc RobotInterface.</Description>
-    <RepositoryUrl>https://github.com/Palatis/Fanuc.RobotInterface</RepositoryUrl>
-    <PackageLicenseExpression>BSD-3-Clause</PackageLicenseExpression>
-    <SignAssembly>False</SignAssembly>
-    <Version>3.0.3</Version>
-    <AssemblyVersion>$(Version).0</AssemblyVersion>
-    <FileVersion>$(Version).0</FileVersion>
-    <PackageProjectUrl>https://github.com/Palatis/FANUC.RobotInterface</PackageProjectUrl>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFrameworks>net48;netstandard2.0;net10.0</TargetFrameworks>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<Nullable>disable</Nullable>
+		<AllowUnsafeBlocks>False</AllowUnsafeBlocks>
+		<Platforms>AnyCPU</Platforms>		
+		<LangVersion>latest</LangVersion>
+	</PropertyGroup>
+	<PropertyGroup>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<Title>Fanuc RobotInterface</Title>
+	</PropertyGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'net48' Or '$(TargetFramework)' == 'netstandard2.0'">
-    <Reference Include="System.Net.Http" />
-  </ItemGroup>
+	<ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+		<Reference Include="System.Net.Http" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Fanuc.SRTP\Fanuc.SRTP.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\Fanuc.SRTP\Fanuc.SRTP.csproj" />
+	</ItemGroup>
 
 </Project>
