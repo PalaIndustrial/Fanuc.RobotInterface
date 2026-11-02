@@ -1,15 +1,11 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Fanuc.RobotInterface;
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace FANUCRobotTest
 {
@@ -301,7 +297,7 @@ namespace FANUCRobotTest
         }
 
         // read / write are crappy because the lib left crappy interfaces.
-        // ReadRShhort() and WriteRShort() doesn't read {count} shorts as it should.
+        // ReadRShort() and WriteRShort() doesn't read {count} shorts as it should.
         public void WriteCommand(string command)
         {
             var lib = _Core.GetLib();
