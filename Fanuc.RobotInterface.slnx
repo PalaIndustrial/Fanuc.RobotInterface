@@ -2,6 +2,7 @@
   <Folder Name="/Solution Items/">
     <File Path="CHANGELOG.md" />
     <File Path="Directory.Build.props" />
+    <File Path="MIGRATION.md" />
     <File Path="README.md" />
   </Folder>
   <Project Path="FANUCRobotTest/FANUCRobotTest.csproj" />
