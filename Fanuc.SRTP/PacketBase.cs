@@ -3,7 +3,7 @@ using System.Linq;
 
 namespace Fanuc.SRTP;
 
-public abstract class PacketBase
+public abstract class PacketBase(byte[] buffer = null)
 {
     protected static ushort _ToUInt16(byte b1, byte b0) => (ushort)(b1 << 8 | b0);
     protected static uint _ToUInt32(byte b3, byte b2, byte b1, byte b0) => (uint)(b3 << 24 | b2 << 16 | b1 << 8 | b0);
@@ -14,7 +14,7 @@ public abstract class PacketBase
 
     public const int HEADER_LENGTH = 56;
 
-    public byte[] Header { get; protected set; }
+    public byte[] Header { get; protected set; } = buffer ?? (new byte[56]);
 
     public PacketType PacketType
     {
@@ -69,7 +69,7 @@ public abstract class PacketBase
         get => _ExtraPayload;
         set
         {
-            _ExtraPayload = value ?? Array.Empty<byte>();
+            _ExtraPayload = value ?? [];
             ExtraLength = (ushort)(value?.Length ?? 0);
         }
     }
@@ -77,10 +77,5 @@ public abstract class PacketBase
     public abstract byte[] Payload { get; set; }
     public abstract byte[] ActualPayload { get; }
 
-    public PacketBase(byte[] buffer = null)
-    {
-        Header = buffer ?? (new byte[56]);
-    }
-
-    public byte[] GetBytes() => Header.Concat(ExtraPayload).ToArray();
+    public byte[] GetBytes() => [.. Header, .. ExtraPayload];
 }

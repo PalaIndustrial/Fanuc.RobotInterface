@@ -7,7 +7,7 @@ public class ShortRequestPacket : ShortPacketBase, IRequestPacket
 
     public override byte[] Payload
     {
-        get => new byte[] { Header[48], Header[49], Header[50], Header[51], Header[52], Header[53] };
+        get => [Header[48], Header[49], Header[50], Header[51], Header[52], Header[53]];
         set
         {
             if (value.Length > 0) Header[48] = value[0];
