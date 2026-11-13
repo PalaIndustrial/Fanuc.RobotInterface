@@ -345,9 +345,6 @@ namespace Fanuc.RobotInterface
         #endregion
 
         #region DataTable
-        public void Refresh() => throw new NotImplementedException();
-        public void Refresh2() => throw new NotImplementedException();
-
         public void WriteCommand(string command)
         {
             if (string.IsNullOrEmpty(command))
