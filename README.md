@@ -21,6 +21,9 @@ A library that allows you to connect to FANUC industrial robot arm. Should work 
 
 Tested with R-30iB.
 
+Intended for direct or local network connections. Behavior across complex
+routed networks has not been tested.
+
 # Example
 
 Connect to a controller and read digital input 1:
