@@ -5,6 +5,7 @@
     <File Path="MIGRATION.md" />
     <File Path="README.md" />
     <File Path="REPORT.md" />
+    <File Path="TODO.md" />
   </Folder>
   <Project Path="FANUCRobotTest/FANUCRobotTest.csproj" />
   <Project Path="Fanuc.RobotInterface.Extensions/Fanuc.RobotInterface.Extensions.csproj" />

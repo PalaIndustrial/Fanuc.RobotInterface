@@ -1,395 +1,227 @@
-﻿## COMPREHENSIVE LIFECYCLE INVESTIGATION REPORT: RobotIF v3.0.4
-
-### SUMMARY
-Investigation of **v3.0.4 tagged code** vs working tree reveals a TCP-based synchronous robot interface with task-based async wrapper providing native session monitoring and limited concurrency control. No explicit CancellationToken support exists in core logic; cancellation propagates indirectly through watcher thread lifecycle.
-
----
-
-## LIFECYCLE ANALYSIS
-
-### **CONNECT PHASE (Synchronous)**
-
-**RobotIF.Connect() - v3.0.4 Tag**
-File: `Fanuc.RobotInterface\RobotIF.cs`, Lines 25-88
-
-```csharp
-public void Connect(string host, ushort port, int timeout)
-{
-    if (IsConnected)
-        throw new IOException("Already connected.");
-    try
-    {
-        Disconnect();  // Cleans up any prior state
-        var client = new TcpClient
-        {
-            ReceiveTimeout = timeout,    // 10000ms default
-            SendTimeout = timeout
-        };
-        client.Client.NoDelay = true;
-        client.Connect(host, port);      // **BLOCKING - Timeout via TcpClient.Connect**
-
-        TcpClient = client;
-        Host = host;
-        SequenceNumber = 0;
-
-        // Handshake 1: INIT packet
-        SendReceiveInternal(new ShortRequestPacket() { ... });
-        // Handshake 2: UNKNOWN_8 packet
-        SendReceiveInternal(new ShortRequestPacket() { ... });
-    }
-    catch (Exception ex)
-    {
-        Disconnect();  // **Cleanup on failure**
-        throw new IOException($"Connecting to {host}:{port} failed.", ex);
-    }
-    PropertyChanged?.Invoke(...);
-}
-```
-
-**RISKS - Connect Phase:**
-- **Line 32**: Unconditional `Disconnect()` call before connect can hide prior connection state
-- **Line 39**: `TcpClient.Connect()` blocks indefinitely if `timeout` parameter is malformed (e.g., negative)
-- **Line 39**: Timeout only applies to socket-level TCP handshake, NOT to INIT/UNKNOWN_8 packet exchanges (handled separately by `ReceiveTimeout`/`SendTimeout` on socket)
-- **Lines 47-59**: No validation that `INIT` or `UNKNOWN_8` responses are actually received; duplicate/corrupted packets silently accepted
-- **Line 84**: If exception in handshake (e.g., `INIT` times out), `Disconnect()` called but `TcpClient` may still have pending receive buffers (see `ReceiveInternal()` below)
-
-**Testability (v3.0.4):**
-- No `ConnectAsync` in base RobotIF; ExRobotIF wraps via `Task.Run()`
-- TcpClient hardcoded; no fake TCP support
-- Direct socket Send/Receive calls
-
----
-
-### **DISCONNECT PHASE**
-
-**RobotIF.Disconnect() - v3.0.4 Tag**
-File: `Fanuc.RobotInterface\RobotIF.cs`, Lines 93-103
-
-```csharp
-public void Disconnect()
-{
-    if (IsConnected)
-    {
-        TcpClient?.Close();      // Closes underlying socket
-        TcpClient?.Dispose();
-        TcpClient = null;        // Clears reference
-
-        PropertyChanged?.Invoke(this,
-            new PropertyChangedEventArgs(nameof(IsConnected)));
-    }
-}
-```
-
-**RISKS - Disconnect Phase:**
-- **Line 95**: Check `IsConnected => TcpClient?.Connected ?? false` races with simultaneous `Close()` call
-- **Line 97**: No guarantee buffer flushes before close
-- **No watcher thread termination in base RobotIF** - managed in ExRobotIF only
-
-**ExRobotIF.Disconnect() - Working Tree**
-File: `Fanuc.RobotInterface.Extensions\ExRobotIF.IRobotInterface.cs`, Lines 13-24
-
-```csharp
-public void Disconnect()
-{
-    if (IsConnected)
-    {
-        _TaskFactory?.StartNew(() => _Robot.Disconnect())?.Wait();  // **Line 17**
-        _CancellationTokenSource?.Cancel();                         // **Line 18**
-        _TaskFactory = null;                                        // **Line 20**
-        OnPropertyChanged(nameof(IsConnected));
-    }
-}
-```
-
-**CRITICAL LIFECYCLE ISSUE:**
-- **Line 17**: Wraps `_Robot.Disconnect()` in a task scheduled on `_TaskFactory` (which uses `_CancellationTokenSource`), then waits
-- **Line 18**: Calls `Cancel()` on the CancellationTokenSource **after** waiting for the task
-- **Ordering Problem**: If `_Robot.Disconnect()` is already running, `Cancel()` may not interrupt it (task already in-flight)
-- **Watcher thread** (spawned during ConnectAsync) is **NOT explicitly joined**; it stops only when `_Robot.IsConnected` returns false
-
----
-
-### **MONITORING/WATCHER THREAD**
-
-**ExRobotIF.ConnectAsync() - v3.0.4 Tag**
-File: `Fanuc.RobotInterface.Extensions\ExRobotIF.cs`, Lines 63-127
-
-```csharp
-public Task ConnectAsync(string host, ushort port, int timeout)
-{
-    if (IsConnected)
-        return Task.CompletedTask;
-
-    var scheduler = new LimitedConcurrencyLevelTaskScheduler(1);  // **Single-threaded serialization**
-    _CancellationTokenSource = new CancellationTokenSource();
-    _TaskFactory = new TaskFactory(_CancellationTokenSource.Token, ..., scheduler);
-
-    return _TaskFactory.StartNew(() =>
-    {
-        _Robot.Connect(host, port, timeout);
-        if (_Robot.IsConnected)
-        {
-            _Robot.WriteCommand("CLRASG");
-            // Set up signal assignments...
-
-            _WatcherThread = new Thread(() =>          // **Line 84**
-            {
-                while (_Robot.IsConnected)  // **Line 91: Polling loop**
-                {
-                    try
-                    {
-                        foreach (var v in AllWritableSignals)
-                            v.PushValue();              // Send pending writes to robot
-                        foreach (var v in AllReadableSignals)
-                            v.PullValue();              // Fetch reads from robot
-                    }
-                    catch
-                    {
-                        Disconnect();                   // **Line 120: Exception -> Disconnect**
-                    }
-                }
-            });
-            _WatcherThread.Start();                     // **Line 124**
-        }
-        OnPropertyChanged(nameof(IsConnected));
-    });
-}
-```
-
-**NATIVE SESSION OWNERSHIP:**
-- **Lines 68-70**: `LimitedConcurrencyLevelTaskScheduler(1)` ensures only 1 operation runs at a time
-- **Line 74**: Core RobotIF.Connect() executes serialized on this scheduler
-- **Line 84-124**: Watcher thread runs independently; **NOT constrained by scheduler**
-- **Session ownership**: RobotIF holds `TcpClient` reference; ExRobotIF monitors signal state
-- **No session "ownership" protocol** - robot resource is single-threaded by convention, not by code
-
-**RISKS - Monitoring:**
-- **Line 91**: Watcher thread **polling loop** with no sleep; burns CPU
-- **Line 118**: Bare `catch` swallows exceptions; no logging
-- **Line 120**: Calling `Disconnect()` from watcher thread while ExRobotIF.Disconnect() may be running creates race
-- **No graceful shutdown**: Watcher thread relies on `TcpClient.Connected` to exit; no explicit join or timeout
-- **Unobserved Task exceptions**: If ExRobotIF.Disconnect() is never called and connection drops, watcher thread silently exits but PropertyChanged not raised
-
----
-
-### **CANCELLATION & TIMEOUT HANDLING**
-
-**Timeout at Connection Level:**
-- `RobotIF.Connect(timeout)` passes timeout to TcpClient: `ReceiveTimeout = timeout; SendTimeout = timeout` (**v3.0.4 Line 36-37**)
-- Affects socket I/O only; not the `Connect()` call itself
-- `client.Connect(host, port)` blocks indefinitely if no default timeout; no parameter passed
-
-**CancellationToken Support:**
-- **ExRobotIF constructor** creates `_CancellationTokenSource`, passes token to `TaskFactory` (v3.0.4 Line 23, 70)
-- **Token is NOT propagated** to actual robot I/O methods (Connect, Disconnect, Read, Write)
-- Watcher thread does NOT check `CancellationTokenSource.Token.IsCancellationRequested`
-- `ConnectAsync()` can only be cancelled by:
-  1. Calling `Disconnect()` (stops watcher via `IsConnected` check)
-  2. Dropping the returned Task (doesn't actually cancel in-flight operations)
-
-**CRITICAL GAP:**
-No way to gracefully interrupt `_Robot.Connect()` if robot is unresponsive; `SendReceiveInternal()` calls are blocking and non-cancellable.
-
----
-
-### **EXCEPTION HANDLING & CLEANUP**
-
-**Connect Failure Cleanup:**
-File: `RobotIF.cs`, Lines 82-86
-```csharp
-catch (Exception ex)
-{
-    Disconnect();  // Cleanup
-    throw new IOException($"Connecting to {host}:{port} failed.", ex);
-}
-```
-Explicit cleanup on exception
-
-**Receive Failure (ReceiveInternal):**
-File: `RobotIF.cs`, Lines 430-441 (from last 50 lines output)
-```csharp
-private byte[] ReceiveInternal()
-{
-    var hn = TcpClient.Client.Receive(HeaderBuffer, ...);
-    if (hn != PacketBase.HEADER_LENGTH)
-        throw new IOException($"Error receiving header, want {HEADER_LENGTH} bytes, got {hn} only.");
-    // Payload receive loop...
-    return [...HeaderBuffer, ...PayloadBuffer.Take(xlen)];
-}
-```
-Exception in Receive leaves TcpClient in undefined state; next operation may hang
-
-**Watcher Thread Exception:**
-Line 118: `catch { Disconnect(); }` silently swallows all exceptions
-
----
-
-### **IsConnected CHECK**
-
-**Property Definition:**
-File: `RobotIF.cs`, Line 20
-```csharp
-public bool IsConnected => TcpClient?.Connected ?? false;
-```
-
-**RISKS:**
-- **Race condition**: `TcpClient?.Connected` is evaluated at call time; socket may close between check and use
-- **Does NOT reflect pending operations**: Returns true even if watcher thread is mid-exception
-- **Dependent on watcher thread's polling**: Remote disconnection not detected until next PullValue()/PushValue() cycle
-
-**Working Tree Addition:**
-File: `IRobotIF.cs`, Line 6 (working tree)
-```csharp
-string Host { get; }
-```
-Allows consumers to detect which host is connected; not present in v3.0.4 tag.
-
----
-
-## FEASIBLE CANCELLATION/SHUTDOWN STRATEGY
-
-### **Current Implementation (v3.0.4):**
-
-1. **Synchronous Connect:**
-   - No cancellation; blocks until success/failure
-   - Timeout only affects socket ops, not SRTP handshake timeouts
-
-2. **Watcher Thread Lifecycle:**
-   - Starts on successful connect
-   - Exits when `TcpClient.Connected` becomes false
-   - No explicit termination signal
-
-3. **Cancellation via Disconnect:**
-   ```csharp
-   // ExRobotIF.Disconnect()
-   _TaskFactory?.StartNew(() => _Robot.Disconnect())?.Wait();
-   _CancellationTokenSource?.Cancel();  // Too late - task already running
-   _TaskFactory = null;
-   ```
-
-### **RECOMMENDED STRATEGY** (for future versions):
-
-**1. Add Explicit Watcher Thread Termination:**
-```csharp
-private volatile bool _ShutdownRequested = false;
-
-// In ConnectAsync, change watcher loop:
-while (_Robot.IsConnected && !_ShutdownRequested)
-{
-    // ... push/pull logic
-    Thread.Sleep(10);  // Prevent CPU spin
-}
-
-// In Disconnect:
-_ShutdownRequested = true;
-_WatcherThread?.Join(5000);  // Wait up to 5 seconds
-```
-
-**2. Add ConnectAsync Timeout via Task.Wait(TimeSpan):**
-```csharp
-public async Task ConnectAsync(string host, ushort port, int timeout)
-{
-    var connectTask = _TaskFactory.StartNew(...);
-    if (!connectTask.Wait(TimeSpan.FromMilliseconds(timeout)))
-    {
-        _CancellationTokenSource.Cancel();
-        throw new TimeoutException($"Connect to {host}:{port} timed out after {timeout}ms");
-    }
-}
-```
-
-**3. Propagate CancellationToken to RobotIF:**
-```csharp
-// Change RobotIF.Connect signature:
-public void Connect(string host, ushort port, int timeout, CancellationToken ct)
-{
-    // Check ct.IsCancellationRequested before/during Send/Receive
-}
-
-// ExRobotIF.ConnectAsync calls with _CancellationTokenSource.Token
-```
-
-**4. Add Watcher Thread Exception Logging:**
-```csharp
-catch (Exception ex)
-{
-    Debug.WriteLine($"Watcher thread error: {ex}");
-    Disconnect();
-}
-```
-
----
-
-## TESTABILITY & FAKE TCP
-
-### **Current Barriers (v3.0.4):**
-- **TcpClient hardcoded** in RobotIF; no abstraction
-- **SendReceiveInternal() directly on socket** (Lines 437-439):
-  ```csharp
-  private void SendInternal(IRequestPacket packet) => TcpClient?.Client?.Send(packet.GetBytes());
-  private byte[] ReceiveInternal() { TcpClient.Client.Receive(...) }
-  ```
-- **No ISocket dependency injection**
-
-### **To Enable Fake TCP:**
-1. Extract `ISocket` interface:
-   ```csharp
-   public interface ISocket
-   {
-       void Send(byte[] data);
-       int Receive(byte[] buffer, int length, SocketFlags flags);
-       void Close();
-   }
-   ```
-2. Inject into RobotIF constructor
-3. Create `FakeSocket` mock that replays recorded SRTP conversations
-4. **Watcher Thread Issue**: Still runs real Thread; need to mock time or add `IThreadFactory`
-
----
-
-## TAGGED vs WORKING TREE DIFFERENCES
-
-### **v3.0.4 Tag -> Current Working Tree Changes:**
-
-| Aspect | v3.0.4 Tag | Working Tree |
-|--------|-----------|--------------|
-| `IRobotIF.Host` | Not present | `string Host { get; }` |
-| `IRobotIF.ExecuteKCL/Karel` | Present in interface | Removed (moved to extension?) |
-| `RobotIF.Host` property | Only private field | Exposed in tag Line 22 |
-| ExRobotIF structure | Same | Same (verified Line 1-150) |
-| LimitedConcurrencyLevelTaskScheduler | Unchanged | Unchanged |
-
-**Impact**: Working tree is backward-incompatible with v3.0.4 (KCL/Karel methods removed from core interface).
-
----
-
-## CRITICAL FINDINGS SUMMARY
-
-| Risk | Severity | Location | Mitigation |
-|------|----------|----------|-----------|
-| **Watcher thread CPU spin** | Medium | ExRobotIF.cs:91 | Add `Thread.Sleep(10)` |
-| **No watcher thread join on Disconnect** | High | ExRobotIF.IRobotInterface.cs:17 | Add explicit `_WatcherThread.Join(timeout)` |
-| **CancellationToken unused** | High | ExRobotIF.cs:70 | Propagate token to RobotIF.Connect() |
-| **Bare catch in watcher** | Medium | ExRobotIF.cs:118 | Log exceptions before Disconnect() |
-| **Send/Receive buffer race on close** | High | RobotIF.cs:95-98 | Add lock around TcpClient state transitions |
-| **Timeout only on socket, not SRTP handshake** | Medium | RobotIF.cs:36-39 | Add explicit timeout wrapper around SendReceiveInternal() |
-| **No fake TCP testability** | Low | RobotIF.cs:437-439 | Extract ISocket interface (non-breaking change possible via adapter) |
-
----
-
-## ACTIONABLE RECOMMENDATIONS
-
-1. **Immediate (Safety-Critical):**
-   - Add watcher thread explicit join in Disconnect() with 5-second timeout
-   - Log watcher thread exceptions (don't silently catch)
-   - Add sleep to prevent CPU spin
-
-2. **Short-term (Robustness):**
-   - Implement timeout wrapper for SRTP handshake (ConnectAsync timeout enforcement)
-   - Add `CancellationToken` parameter to RobotIF.Connect() and propagate through Send/Receive
-
-3. **Long-term (Testability):**
-   - Extract ISocket abstraction for fake TCP testing
-   - Consider redesigning watcher thread as cancellable Task instead of Thread
-
-**No changes to machine interlocks suggested** - these are orthogonal to lifecycle management.
+# Project State and Lifecycle Investigation Report
+
+Reviewed: 2026-11-13
+
+## Scope and evidence
+
+This report describes the current working tree, not the `v3.0.4` tag.
+The reviewed source baseline is commit `39b8931`, with local solution-item
+changes present. Findings below are based on source inspection; failure
+scenarios have not been reproduced against a robot or a simulated controller.
+Severity describes potential application reliability and data-integrity impact,
+not a machine-safety certification.
+
+The review covers project configuration, the core TCP transport, the extended
+interface's lifecycle and holders, SRTP framing, HTTP helpers, and the desktop
+application's connection path. It is not an exhaustive audit of every converter,
+controller command, or UI binding.
+
+## Current project structure
+
+| Project | Responsibility | Targets |
+|---|---|---|
+| `Fanuc.SRTP` | SRTP packet models and serialization | `net48`, `netstandard2.0`, `net10.0` |
+| `Fanuc.RobotInterface` | `IRobotIF`, synchronous `RobotIF`, I/O and HTTP extensions, robot data models | `net48`, `netstandard2.0`, `net10.0` |
+| `Fanuc.RobotInterface.Extensions` | `IExRobotIF`, `ExRobotIF`, signal/data holders, dictionaries and scheduler | `net48`, `netstandard2.0`, `net10.0` |
+| `FANUCRobotTest` | Interactive WPF application with native and official COM-backed interfaces | `net10.0-windows10.0.18362.0` |
+
+- `Directory.Build.props` sets shared version `3.0.4` and library revision `0`,
+  producing library version `3.0.4.0`. README and migration documentation use
+  the release label `3.0.4`; that label alone does not identify this source state.
+- The solution is `Fanuc.RobotInterface.slnx`.
+- Extended interface types retain the `Fanuc.RobotInterface` namespace despite
+  moving to the Extensions assembly. SRTP types use `Fanuc.SRTP`.
+- `IRobotIF.Host` is required. `RobotIF` implements it explicitly; `ExRobotIF`
+  and the desktop application's `OfficialIF` expose public properties.
+- `ExecuteKCL`, `ExecuteKarel`, and `ResetAlarm` are core extension methods,
+  not `IRobotIF` instance members. `ClearAlarm` remains an interface member.
+- Dictionaries report their actual count and forward collection/property
+  notifications. Their concrete implementation and the scheduler are internal.
+- `CHANGELOG.md` and `MIGRATION.md` document the package split, compatibility
+  changes, framework changes, and I/O fixes.
+
+### Build and execution prerequisites
+
+The source requires an SDK supporting .NET 10 and `.slnx`. Signing is enabled
+using `C:\Users\Palatis\.dotnet\Palatis.snk` in shared properties and again in
+`Fanuc.SRTP.csproj`; a different machine needs an appropriate key or explicit
+build-property overrides. Changing signing changes assembly identity.
+
+The desktop application additionally references the `FRRJIf` and `FRRobotIFLib`
+COM type libraries. Building or running it is not equivalent to building just
+the managed libraries and requires the relevant installed components.
+It uses WPF-UI, not ModernWpf.
+
+## Connection and shutdown behavior
+
+### Core `RobotIF`
+
+Source: `Fanuc.RobotInterface\RobotIF.cs`, especially `Connect`, `Disconnect`,
+`SendInternal`, `ReceiveInternal`, and `SendReceiveInternal`.
+
+1. `Connect` rejects an already-connected instance and calls `Disconnect`.
+2. It creates a `TcpClient`, sets receive/send timeouts and `NoDelay`, then
+   calls synchronous `TcpClient.Connect(host, port)`.
+3. After TCP connection succeeds, it stores the client and host, resets the
+   sequence number, and exchanges `INIT` and `UNKNOWN_8` packets.
+4. It rejects `SHORT_FAILED` responses but does not comprehensively validate
+   response identity or expected payload shape.
+5. Exceptions inside the connection block trigger `Disconnect` and are wrapped
+   in an `IOException`. Successful completion raises `IsConnected` notification.
+
+The default port is 60008 and the default I/O timeout is 10,000 ms.
+The timeout configures synchronous socket send/receive operations, including
+those used for the SRTP handshake. It does **not** configure the TCP connect
+deadline or an overall handshake deadline. Zero permits unbounded socket I/O;
+invalid timeout values may fail during socket configuration.
+
+`IsConnected` reads `TcpClient.Connected`; it is not a heartbeat or a guarantee
+that the next operation will succeed. `Disconnect` only closes, disposes, and
+clears the client when that property currently reports true. It does not clear
+the stored host. Neither the core interface nor implementation exposes
+cancellation or an `IDisposable` lifecycle contract.
+
+### Extended `ExRobotIF`
+
+Sources: `Fanuc.RobotInterface.Extensions\ExRobotIF.cs`,
+`ExRobotIF.IRobotInterface.cs`, and `ExRobotIF.Data.cs`.
+
+- The constructor accepts an `IRobotIF`, so the wrapper can be exercised with a
+  fake backend independently of the real TCP implementation.
+- `ConnectAsync` returns an already-completed task when connected. Otherwise it
+  creates a new single-concurrency scheduler, cancellation source and task
+  factory, and schedules the synchronous backend connection.
+- Once connected, it sends `CLRASG`, recreates assignments for existing complex
+  holders, starts a watcher thread, and raises `IsConnected` notification.
+- The watcher pushes dirty values and pulls all instantiated readable holders.
+  Holder I/O normally calls back through the wrapper's scheduled methods.
+  Thus, although the watcher thread itself is outside the scheduler, its normal
+  backend I/O is serialized with other tasks on the same factory.
+- There is no polling delay or cancellation check in the watcher loop. With no
+  holders it can busy-spin; with holders, network and scheduling work normally
+  limit the iteration rate.
+- The watcher catches update exceptions and calls `Disconnect`, without exposing
+  the original error. It is a foreground thread and is never explicitly joined.
+- `Disconnect` checks the backend connection state, schedules backend
+  disconnection, waits for it, then cancels the factory token and clears the
+  factory. It does not dispose the cancellation source or join/reset the watcher.
+- Synchronous methods block on `.Wait()` or `.Result`. The async methods schedule
+  blocking work; they are not nonblocking socket APIs.
+
+The token can prevent pending scheduled work from starting. It does not abort
+an executing socket operation, and callers cannot supply their own token.
+Disconnect is queued behind existing work rather than immediately interrupting
+it. Dropping a returned task does not cancel anything.
+
+### HTTP helpers and desktop application
+
+Source: `Fanuc.RobotInterface\IRobotIFExtension.cs`.
+
+KCL and Karel helpers use a shared `HttpClient`, construct HTTP requests from
+`IRobotIF.Host`, and synchronously wait for responses. Their timeout is separate
+from the TCP timeout. They do not enforce an SRTP-connected-state guard.
+`ExRobotIF.AsyncExecuteKCL` and `AsyncExecuteKarel` schedule those blocking
+helpers; calling the synchronous extension methods directly bypasses that
+scheduler. `RobotIF.Host` remains populated after disconnect, so an HTTP call
+can still target the previous controller.
+
+`FANUCRobotTest\UI\MainWindow.xaml.cs` defaults to
+`new ExRobotIF(new RobotIF())` and also constructs the official COM-backed
+alternative. Its button handler connects/disconnects synchronously on the UI
+thread. Closing the window calls `Disconnect` before application shutdown.
+Long-running connection or queued I/O can therefore delay UI response or exit.
+
+## Confirmed improvements already present
+
+- Digital writes preserve neighboring bits using one or two boundary reads
+  before a byte-aligned write. They no longer unconditionally zero those bits.
+- Digital and group writes reject address/payload ranges beyond their supported
+  protocol limits.
+- String register and string system-variable holders pad odd byte counts before
+  SNPX writes.
+- `RobotDataDictionary.Count` returns `_Items.Count`; dictionary notifications
+  are forwarded to consumers.
+- I/O extension methods add operation context to errors where implemented.
+
+The digital read-modify-write is still not atomic with respect to another
+caller or controller-side changes. These improvements do not establish
+thread safety for direct concurrent use of `RobotIF`.
+
+## Current findings
+
+These are source-confirmed implementation gaps. Their consequences describe
+the triggering conditions, not observed production incidents.
+
+| ID | Priority | Finding and consequence | Source |
+|---|---|---|---|
+| F1 | High | A single receive must return the entire 56-byte header. TCP may legally split it, so a valid fragmented response is rejected. A single send also ignores the returned byte count, allowing a partially sent request to be treated as complete. | `RobotIF.cs`: `ReceiveInternal`, `SendInternal` |
+| F2 | High | The payload receive loop does not handle a zero-byte receive. An orderly peer close partway through an extended response leaves the offset unchanged and can spin indefinitely instead of reporting EOF. | `RobotIF.cs`: `ReceiveInternal` |
+| F3 | High | Cleanup depends on `IsConnected`. A client already reporting disconnected is neither disposed nor cleared. Also, the newly created client is assigned to the field only after TCP connect succeeds, so failures before that assignment leave the local client outside the catch block's cleanup path. | `RobotIF.cs`: `Connect`, `Disconnect` |
+| F4 | High | No core lock protects request/response exchanges, sequence numbers, buffers or connection transitions. Direct concurrent calls, a shared backend, or overlapping connection attempts can interleave exchanges or race disposal. Wrapper serialization covers only work using the same task factory. | `RobotIF.cs`; `ExRobotIF.cs`: `ConnectAsync` |
+| F5 | High | Extended shutdown has no watcher termination/join protocol and cannot interrupt queued or active blocking I/O. If the backend already reports disconnected, the entire cleanup body is skipped. A rapid reconnect can let an old watcher observe the new connection and continue alongside the new watcher. | `ExRobotIF.cs`: watcher loop; `ExRobotIF.IRobotInterface.cs`: `Disconnect` |
+| F6 | High | Extended initialization has no failure cleanup after backend connection. If `CLRASG` or a holder assignment fails, the connect task faults while the backend can remain connected without a watcher. A subsequent `ConnectAsync` then returns completed solely because `IsConnected` is true. | `ExRobotIF.cs`: `ConnectAsync` |
+| F7 | Medium | Watcher exceptions lose their original diagnostic information. If the backend has already become disconnected, wrapper `Disconnect` can skip both cancellation and notification. An exception thrown by cleanup itself also escapes the watcher catch. | `ExRobotIF.cs`; `ExRobotIF.IRobotInterface.cs` |
+| F8 | Medium | `AssignmentOffset` starts at 1 but is not reset when reconnect sends `CLRASG`. Repeated reconnects allocate progressively higher offsets despite clearing controller assignments; the allocator has no range check. | `ExRobotIF.Data.cs`: `AssignmentOffset`, `AsyncWriteAssignment`; `ExRobotIF.cs`: `ConnectAsync` |
+| F9 | Medium | Read-side range checks are weaker than write-side checks. For example, `ReadGI(65537, 1)` decrements the index and casts it to `ushort`, targeting offset zero instead of rejecting it. `WriteSNPX(0, ...)` also passes validation and casts the decremented index to 65535. | `RobotIF.cs`: `ReadGIO`, `ReadDIO`, `ReadSNPX`, `WriteSNPX` |
+| F10 | Medium | SNPX converts byte counts to word counts by integer division without rejecting odd counts. Oversized command/SNPX payload lengths and indexes are narrowed to `ushort` without complete validation. Holder-level string padding does not protect direct callers. | `RobotIF.cs`: `WriteCommand`, `WriteSNPX`, `ReadSNPX`; `Fanuc.SRTP\PacketBase.cs`: `ExtraPayload` |
+| F11 | Medium | Response checks mostly reject only `SHORT_FAILED`; they do not correlate sequence/service/segment and expected lengths. Short group reads silently leave missing values as zero; digital/SNPX reads can return fewer values than requested. | `RobotIF.cs`: handshake and read/write methods |
+| F12 | Medium | Writable holder state is unsynchronized. If a local value changes during `WriteValue`, `PushValue` can clear the dirty flag for the newer value even though only the earlier value was sent. | `ExRobotIF.Data.cs`: `_LocalUpdate`, `PushValue` |
+| F13 | Medium | An empty watcher has no wait and can consume CPU continuously. Foreground watcher lifetime also depends on successful shutdown rather than an explicit owner-managed termination contract. | `ExRobotIF.cs`: watcher creation and loop |
+
+`RobotIF.Refresh` and `Refresh2` additionally remain public methods that throw
+`NotImplementedException`; neither is part of `IRobotIF`.
+
+## Corrections to the previous report
+
+- This is a working-tree assessment, not an asserted comparison against tagged
+  source. API migration details belong to `CHANGELOG.md` and `MIGRATION.md`.
+- The connect timeout is not a TCP connect timeout; socket I/O timeouts do apply
+  to the SRTP handshake's send/receive operations.
+- Handshake responses are received and checked for `SHORT_FAILED`. The missing
+  piece is comprehensive validation, not the absence of all response checks.
+- The watcher is not entirely outside I/O serialization: built-in holders route
+  normal reads and writes through the wrapper's task factory.
+- A task timeout or cancellation of pending tasks does not terminate an executing
+  synchronous connect/receive. Merely wrapping work in a timed wait would leave
+  the underlying operation running.
+- Testability is not all-or-nothing. The wrapper already accepts `IRobotIF`;
+  the core can be tested using a local TCP server without changing its API.
+  A transport abstraction would make deterministic fault injection easier,
+  but is not required for all protocol tests.
+
+## Recommended next work
+
+1. **Transport correctness:** loop until all request/header bytes are transferred,
+   treat zero-byte reads as EOF, and reject malformed or mismatched responses
+   and insufficient payloads.
+2. **Lifecycle ownership:** dispose clients regardless of connection status,
+   clean up failed local connects and partial extended initialization, and
+   serialize connection state transitions as well as request/response traffic.
+3. **Cancellation and shutdown:** define an explicit watcher stop/await protocol
+   that avoids self-join, prevents overlap across reconnects, and surfaces
+   polling failures. An actual connect deadline must cancel or dispose the
+   underlying operation, not just stop waiting for its task.
+4. **Polling and holder state:** add configurable pacing or an idle wait, reset
+   and bound assignment allocation after `CLRASG`, and synchronize pending writes
+   so newer values cannot lose their dirty state.
+5. **Input contracts:** consistently validate address ranges, byte/word alignment
+   and payload limits across reads, writes and direct SNPX calls.
+6. **Regression coverage:** use a fake `IRobotIF` for wrapper failures/reconnects,
+   and a local TCP server for fragmented headers/payloads, mid-payload EOF,
+   truncated responses and protocol correlation. Cover boundary I/O preservation,
+   assignment reset and concurrent holder updates without a physical robot.
+
+These recommendations concern application lifecycle and protocol correctness;
+they do not replace controller interlocks or other machine-safety mechanisms.
+
+## Validation status
+
+- Findings were checked against the current source and project files.
+- The Visual Studio workspace build succeeded during this review. This does not
+  establish runtime behavior or coverage of every target/configuration.
+- The solution contains an interactive test application, not an automated unit
+  test project. Visual Studio test discovery was unavailable in this session;
+  no automated test results are claimed.
+- No live robot connection, COM integration test, or runtime fault-injection
+  test was performed.
+- This update changes only this report, not application behavior.
