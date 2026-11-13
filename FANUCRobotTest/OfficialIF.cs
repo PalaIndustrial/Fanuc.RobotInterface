@@ -3,9 +3,7 @@ using Fanuc.RobotInterface;
 using System;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace FANUCRobotTest
 {
@@ -21,10 +19,9 @@ namespace FANUCRobotTest
         public const ushort DEFAULT_ROBOTIF_PORT = 60008;
         public const int DEFAULT_TIMEOUT = 10000;
 
-        private static HttpClient _HttpClient = new();
-
         private FRRJIf.Core _Core;
         private string _Host;
+        public string Host => _Host;
 
         public ushort HttpPort { get; set; } = DEFAULT_HTTP_PORT;
         private ushort FtpPort { get; set; } = DEFAULT_FTP_PORT;
@@ -60,78 +57,6 @@ namespace FANUCRobotTest
         {
             if (_Core?.ClearAlarm(0) != true)
                 throw new IOException($"{_Core.DebugMessage}");
-        }
-
-        public void ResetAlarm() => ExecuteKCL("reset");
-
-        private static readonly Regex sKclSuccessPattern = new(
-            @"<BODY.*>.*<XMP.*>\s*(?<XMP>.*)\s*</\s*XMP>.*</\s*BODY>",
-            RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase
-        );
-        private static readonly Regex sKclFailPatter = new(
-            @"<BODY.*>.*ERROR:\s*([^<]*)\s*.*</\s*BODY>",
-            RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase
-        );
-
-        //private async Task<string> ExecKcl(string command)
-        //{
-        //    if (!IsConnected)
-        //        throw new IOException("Not connected");
-
-        //    var response = await _HttpClient.GetAsync($"http://{_Host}:{HttpPort}/KCL/{command}").ConfigureAwait(false);
-        //    response.EnsureSuccessStatusCode();
-
-        //    var content = await response.Content.ReadAsStringAsync();
-        //    var m = sKclSuccessPattern.Match(content);
-        //    if (m.Success)
-        //    {
-        //        return m.Groups["XMP"].Value;
-        //    }
-        //    else
-        //    {
-        //        var mm = sKclFailPatter.Match(content);
-        //        if (m.Success)
-        //            throw new IOException($"Executing KCL  \"{command}\" failed: {mm.Groups[1].Value}");
-        //    }
-        //    throw new IOException($"Executing KCL  \"{command}\" failed: {content}");
-        //}
-        //private async Task<string> ExecKarel(string command)
-        //{
-        //    if (!IsConnected)
-        //        throw new IOException("Not connected");
-
-        //    var response = await _HttpClient.GetAsync($"http://{_Host}:{HttpPort}/KAREL/{command}").ConfigureAwait(false);
-        //    response.EnsureSuccessStatusCode();
-
-        //    return await response.Content.ReadAsStringAsync();
-        //}
-
-        public string ExecuteKCL(string command)
-        {
-            var response = _HttpClient.GetAsync($"http://{_Host}/KCL/{command}").Result;
-            response.EnsureSuccessStatusCode();
-
-            var content = response.Content.ReadAsStringAsync().Result;
-            var m = sKclSuccessPattern.Match(content);
-            if (m.Success)
-            {
-                return m.Groups["XMP"].Value;
-            }
-            else
-            {
-                var mm = sKclFailPatter.Match(content);
-                if (m.Success)
-                    throw new IOException($"Executing KCL \"{command}\" failed: {mm.Groups[1].Value}");
-            }
-            throw new IOException($"Executing KCL \"{command}\" failed: {content}");
-        }
-
-        public string ExecuteKarel(string program)
-        {
-            var response = _HttpClient.GetAsync($"http://{_Host}/KAREL/{program}").Result;
-            response.EnsureSuccessStatusCode();
-
-            return response.Content.ReadAsStringAsync().Result;
         }
 
         #region IO
