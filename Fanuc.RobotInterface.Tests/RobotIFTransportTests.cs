@@ -27,7 +27,8 @@ public sealed class RobotIFTransportTests
 
             ReadRequest(socket);
             SendAll(socket, ResponseHeader());
-            ReadRequest(socket);
+            var request = ReadRequest(socket);
+            Assert.AreEqual((byte)MessageType.SHORT, request[31]);
             SendAll(socket, ResponseHeader(expected.Length));
             SendAll(socket, expected, 0, 3);
             Thread.Sleep(200);
@@ -39,6 +40,224 @@ public sealed class RobotIFTransportTests
         {
             robot.Connect("127.0.0.1", server.Port, 3000);
             CollectionAssert.AreEqual(expected, robot.ReadSNPX(1, (ushort)expected.Length));
+            server.Complete();
+        }
+        finally
+        {
+            robot.Disconnect();
+        }
+    }
+
+    [TestMethod]
+    [DataRow("DI", false, 7)]
+    [DataRow("DI", true, 7)]
+    [DataRow("GI", false, 8)]
+    [DataRow("GI", true, 8)]
+    [DataRow("SNPX", false, 8)]
+    [DataRow("SNPX", true, 8)]
+    public void ReadRejectsInsufficientPayload(string kind, bool extended, int requiredBytes)
+    {
+        using var server = new TestServer(socket =>
+        {
+            Handshake(socket);
+            ReadRequest(socket);
+            SendAll(socket, ResponseHeader(extended ? 4 : 0));
+            if (extended)
+                SendAll(socket, new byte[] { 1, 2, 3, 4 });
+        });
+        var robot = new RobotIF();
+        try
+        {
+            robot.Connect("127.0.0.1", server.Port, 3000);
+            Action read = kind switch
+            {
+                "DI" => () => robot.ReadDI(2, 49),
+                "GI" => () => robot.ReadGI(1, 4),
+                _ => () => robot.ReadSNPX(1, 8)
+            };
+            var error = Assert.ThrowsExactly<IOException>(read);
+            StringAssert.Contains(error.Message, $"returned {(extended ? 4 : 6)} payload bytes");
+            StringAssert.Contains(error.Message, $"expected at least {requiredBytes}");
+            server.Complete();
+        }
+        finally
+        {
+            robot.Disconnect();
+        }
+    }
+
+    [TestMethod]
+    [DataRow("DI", 1)]
+    [DataRow("GI", 4)]
+    [DataRow("SNPX", 4)]
+    public void ReadAcceptsAndTracesExcessExtendedPayload(string kind, int requiredBytes)
+    {
+        var payload = new byte[] { 0x55, 0xaa, 0x33, 0x44, 0x66, 0x77, 0x99, 0x88 };
+        using var server = new TestServer(socket =>
+        {
+            Handshake(socket);
+            ReadRequest(socket);
+            SendAll(socket, ResponseHeader(payload.Length));
+            SendAll(socket, payload);
+        });
+        using var output = new StringWriter();
+        using var listener = new TextWriterTraceListener(output);
+        Trace.Listeners.Add(listener);
+        var robot = new RobotIF();
+        try
+        {
+            robot.Connect("127.0.0.1", server.Port, 3000);
+            switch (kind)
+            {
+                case "DI":
+                    CollectionAssert.AreEqual(new[] { true, false, true, false, true, false, true, false }, robot.ReadDI(1, 8));
+                    break;
+                case "GI":
+                    CollectionAssert.AreEqual(new ushort[] { 0xaa55, 0x4433 }, robot.ReadGI(1, 2));
+                    break;
+                default:
+                    CollectionAssert.AreEqual(payload.Take(4).ToArray(), robot.ReadSNPX(1, 4));
+                    break;
+            }
+            Trace.Flush();
+            StringAssert.Contains(output.ToString(), $"returned 8 payload bytes; expected {requiredBytes}");
+            server.Complete();
+        }
+        finally
+        {
+            Trace.Listeners.Remove(listener);
+            robot.Disconnect();
+        }
+    }
+
+    [TestMethod]
+    public void ShortResponsePaddingDoesNotProduceExcessWarning()
+    {
+        using var server = new TestServer(socket =>
+        {
+            Handshake(socket);
+            ReadRequest(socket);
+            var response = ResponseHeader();
+            response[44] = 7;
+            response[45] = 9;
+            SendAll(socket, response);
+        });
+        using var output = new StringWriter();
+        using var listener = new TextWriterTraceListener(output);
+        Trace.Listeners.Add(listener);
+        var robot = new RobotIF();
+        try
+        {
+            robot.Connect("127.0.0.1", server.Port, 3000);
+            CollectionAssert.AreEqual(new byte[] { 7, 9 }, robot.ReadSNPX(1, 2));
+            Trace.Flush();
+            Assert.AreEqual("", output.ToString());
+            server.Complete();
+        }
+        finally
+        {
+            Trace.Listeners.Remove(listener);
+            robot.Disconnect();
+        }
+    }
+
+    [TestMethod]
+    [DataRow("DI", 0xc0, 0)]
+    [DataRow("GI", 0x80, 4)]
+    [DataRow("SNPX", 0x00, 0)]
+    [DataRow("DI", 0xd4, 4)]
+    [DataRow("GI", 0xd4, 4)]
+    [DataRow("SNPX", 0xd4, 4)]
+    public void ReadRejectsUnexpectedAckAfterReceivingEntireFrame(string kind, int messageType, int extraLength)
+    {
+        using var server = new TestServer(socket =>
+        {
+            Handshake(socket);
+            ReadRequest(socket);
+            var response = ResponseHeader(extraLength);
+            response[31] = (byte)messageType;
+            SendAll(socket, response);
+            if (extraLength > 0)
+                SendAll(socket, new byte[] { 1, 2, 3, 4 });
+
+            ReadRequest(socket);
+            var nextResponse = ResponseHeader();
+            nextResponse[44] = 42;
+            SendAll(socket, nextResponse);
+        });
+        var robot = new RobotIF();
+        try
+        {
+            robot.Connect("127.0.0.1", server.Port, 3000);
+            Action read = kind switch
+            {
+                "DI" => () => robot.ReadDI(1, 8),
+                "GI" => () => robot.ReadGI(1, 1),
+                _ => () => robot.ReadSNPX(1, 2)
+            };
+            var error = Assert.ThrowsExactly<IOException>(read);
+            StringAssert.Contains(error.Message, $"unexpected response type 0x{messageType:X2}");
+            CollectionAssert.AreEqual(new byte[] { 42, 0 }, robot.ReadSNPX(1, 2));
+            server.Complete();
+        }
+        finally
+        {
+            robot.Disconnect();
+        }
+    }
+
+    [TestMethod]
+    public void LongAckWithoutExtraPayloadDoesNotUseInlineBytes()
+    {
+        using var server = new TestServer(socket =>
+        {
+            Handshake(socket);
+            ReadRequest(socket);
+            var response = ResponseHeader();
+            response[31] = (byte)MessageType.LONG_ACK;
+            response[44] = 42;
+            SendAll(socket, response);
+        });
+        var robot = new RobotIF();
+        try
+        {
+            robot.Connect("127.0.0.1", server.Port, 3000);
+            var error = Assert.ThrowsExactly<IOException>(() => robot.ReadSNPX(1, 2));
+            StringAssert.Contains(error.Message, "returned 0 payload bytes; expected at least 2");
+            server.Complete();
+        }
+        finally
+        {
+            robot.Disconnect();
+        }
+    }
+
+    [TestMethod]
+    [DataRow("DI")]
+    [DataRow("GI")]
+    [DataRow("SNPX")]
+    public void ReadRejectsFailureResponse(string kind)
+    {
+        using var server = new TestServer(socket =>
+        {
+            Handshake(socket);
+            ReadRequest(socket);
+            var response = ResponseHeader();
+            response[31] = (byte)MessageType.SHORT_FAILED;
+            SendAll(socket, response);
+        });
+        var robot = new RobotIF();
+        try
+        {
+            robot.Connect("127.0.0.1", server.Port, 3000);
+            Action read = kind switch
+            {
+                "DI" => () => robot.ReadDI(1, 8),
+                "GI" => () => robot.ReadGI(1, 1),
+                _ => () => robot.ReadSNPX(1, 2)
+            };
+            var error = Assert.ThrowsExactly<IOException>(read);
+            StringAssert.Contains(error.Message, "Wrong data received");
             server.Complete();
         }
         finally
@@ -629,7 +848,7 @@ public sealed class RobotIFTransportTests
         var header = new byte[PacketBase.HEADER_LENGTH];
         header[4] = (byte)extraLength;
         header[5] = (byte)(extraLength >> 8);
-        header[31] = (byte)MessageType.SHORT_ACK;
+        header[31] = (byte)(extraLength == 0 ? MessageType.SHORT_ACK : MessageType.LONG_ACK);
         return header;
     }
 

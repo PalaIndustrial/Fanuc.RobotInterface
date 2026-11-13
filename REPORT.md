@@ -161,7 +161,7 @@ the triggering conditions, not observed production incidents.
 | F5 | High | Socket I/O can be interrupted and watcher overlap is prevented, but shutdown has no universal bound while TCP connect, an HTTP operation or a consumer callback remains blocked. | `ExRobotIF.cs`: `FinishStop`; `RobotIF.cs`: `Connect` |
 | F9 | Medium | Read-side range checks are weaker than write-side checks. For example, `ReadGI(65537, 1)` decrements the index and casts it to `ushort`, targeting offset zero instead of rejecting it. `WriteSNPX(0, ...)` also passes validation and casts the decremented index to 65535. | `RobotIF.cs`: `ReadGIO`, `ReadDIO`, `ReadSNPX`, `WriteSNPX` |
 | F10 | Medium | SNPX converts byte counts to word counts by integer division without rejecting odd counts. Oversized command/SNPX payload lengths and indexes are narrowed to `ushort` without complete validation. Holder-level string padding does not protect direct callers. | `RobotIF.cs`: `WriteCommand`, `WriteSNPX`, `ReadSNPX`; `Fanuc.SRTP\PacketBase.cs`: `ExtraPayload` |
-| F11 | Medium | Response checks mostly reject only `SHORT_FAILED`; they do not correlate sequence/service/segment and expected lengths. Short group reads silently leave missing values as zero; digital/SNPX reads can return fewer values than requested. | `RobotIF.cs`: handshake and read/write methods |
+| F11 | Medium | Reads validate ACK format and minimum payload length, but fixed six-byte short payloads can contain indistinguishable padding. Handshake and write ACK types are not validated, and response identity and other fields are not correlated with requests; their semantics require investigation. | `RobotIF.cs`: handshake and read/write methods |
 | F13 | Medium | The background watcher now has a fixed 10 ms inter-pass wait, but idle CPU and active refresh cadence have not been separately measured or made configurable. | `ExRobotIF.cs`: `Watch` |
 
 F3, F4, F6, F7 and F8 were addressed by the lifecycle changes. F12's dirty
@@ -188,8 +188,8 @@ consecutive writes and their acknowledgments.
 
 ## Recommended next work
 
-1. **Transport correctness:** add deterministic partial-send coverage, and reject
-   malformed or mismatched responses and insufficient payloads.
+1. **Transport correctness:** add deterministic partial-send coverage and
+   investigate response identity before rejecting unverified field patterns.
 2. **Cancellation and shutdown:** implement actual connect and handshake
    deadlines and caller cancellation, and verify shutdown limits. A deadline must
    interrupt the underlying operation, not merely stop waiting for its task.
@@ -205,12 +205,14 @@ they do not replace controller interlocks or other machine-safety mechanisms.
 
 ## Validation status
 
-- The Visual Studio workspace build succeeded. The library test runner passed
-  52 tests on .NET Framework 4.8, 53 on .NET 8 (using .NET Standard 2.0 assets),
-  and 52 on .NET 10; Test Explorer passed 15 Windows/.NET 10 desktop tests.
+- The Visual Studio workspace build succeeded. The last full library test run
+  passed 208 tests across .NET Framework 4.8, .NET 8 (using .NET Standard 2.0
+  assets) and .NET 10. The last desktop test run passed 15 Windows/.NET 10 tests.
   A combined Test Explorer run reported a test-storage error after reporting
   154 passes, so the projects were verified separately.
 - Loopback tests cover transport serialization, initialization failure, blocked
   I/O shutdown, reconnect, assignment allocation and write failure/no replay.
   No live robot connection or deterministic partial-send fault injection was
   performed.
+- Read ACK validation, length checks and extended-payload tracing were exercised
+  by targeted transport tests on .NET Framework 4.8, .NET 8 and .NET 10.

@@ -43,10 +43,14 @@ is still needed. `FANUCRobotTest` remains an interactive application.
   partial session resources. A later connect must retry initialization rather
   than report success for a connected backend without a watcher.
 - [ ] **[HIGH] T07 - Validate response identity and expected payload lengths (F11).**
-  Validate protocol-defined response fields against the request for handshake,
-  reads and writes. Reject malformed, mismatched and truncated responses instead
-  of returning short arrays or zero-filled group values. Cover both short and
-  extended responses.
+   - [x] **T07.1**: reject read payloads shorter than required, accepting and
+     tracing excess extended bytes without assuming they are invalid. Short
+     responses have six payload bytes whose padding cannot be distinguished.
+   - [x] **T07.1a**: validate read ACK types against their response data format
+     after receiving the declared frame; treat an empty long payload as empty.
+   - [ ] **T07.2**: investigate request/response field relationships using
+     controller captures before enforcing identity checks for handshake, reads
+     and writes. Do not assume undocumented fields are echoed.
 - [ ] **[HIGH] T08 - Reject invalid addresses, counts and payload sizes (F9, F10).**
   Validate read ranges, SNPX indexes, byte/word alignment and command/SNPX payload
   limits before narrowing to `ushort` or sending anything. Cover index zero,

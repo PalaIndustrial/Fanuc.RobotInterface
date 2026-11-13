@@ -1,6 +1,7 @@
 ﻿using Fanuc.SRTP;
 using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
@@ -254,11 +255,7 @@ namespace Fanuc.RobotInterface
                 Count = (ushort)len,
             });
 
-            // TODO: validate received packet
-            if (rr.MessageType == MessageType.SHORT_FAILED)
-                throw new IOException($"Read {selector} error! Wrong data received, check your request.");
-
-            var values = rr.ActualPayload
+            var values = ReadPayload(rr, len / 8, selector)
                 .Take(len / 8)
                 .SelectMany(v => new bool[]
                 {
@@ -301,14 +298,10 @@ namespace Fanuc.RobotInterface
                 Count = count,
             });
 
-            // TODO: validate received packet
-            if (rr.MessageType == MessageType.SHORT_FAILED)
-                throw new IOException($"Read {selector} error! Wrong data received, check your request.");
-
+            var payload = ReadPayload(rr, count * 2, selector);
             var values = new ushort[count];
-            var n = Math.Min(count, rr.ActualPayload.Length / 2);
-            for (int i = 0; i < n; ++i)
-                values[i] = (ushort)((rr.ActualPayload[i * 2 + 1] << 8) | rr.ActualPayload[i * 2]);
+            for (int i = 0; i < count; ++i)
+                values[i] = (ushort)((payload[i * 2 + 1] << 8) | payload[i * 2]);
             return values;
         }
         public ushort[] ReadGI(int index, ushort count) => ReadGIO(SegmentSelector.WORD_AQ, index, count);
@@ -605,11 +598,29 @@ namespace Fanuc.RobotInterface
                 Count = (ushort)(count / 2),
             });
 
-            // TODO: validate received packet
-            if (rr.MessageType == MessageType.SHORT_FAILED)
-                throw new IOException($"Read {SegmentSelector.WORD_R} error! Wrong data received, check your request.");
+            return [.. ReadPayload(rr, count, SegmentSelector.WORD_R).Take(count)];
+        }
 
-            return [.. rr.ActualPayload.Take(count)];
+        private static byte[] ReadPayload(IResponsePacket response, int requiredBytes, SegmentSelector selector)
+        {
+            if (response.MessageType == MessageType.SHORT_FAILED)
+                throw new IOException($"Read {selector} error! Wrong data received, check your request.");
+
+            byte[] payload;
+            if (response.MessageType == MessageType.SHORT_ACK && response is ShortResponsePacket)
+                payload = response.ActualPayload;
+            else if (response.MessageType == MessageType.LONG_ACK)
+                payload = response is ExtendedResponsePacket ? response.ActualPayload : Array.Empty<byte>();
+            else
+                throw new IOException($"Read {selector} returned unexpected response type 0x{(byte)response.MessageType:X2} for its payload format.");
+
+            if (payload.Length < requiredBytes)
+                throw new IOException($"Read {selector} returned {payload.Length} payload bytes; expected at least {requiredBytes}.");
+
+            if (response is ExtendedResponsePacket && payload.Length > requiredBytes)
+                Trace.TraceInformation($"Read {selector} returned {payload.Length} payload bytes; expected {requiredBytes}. Extra bytes were ignored.");
+
+            return payload;
         }
         #endregion
 

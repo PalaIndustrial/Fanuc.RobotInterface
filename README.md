@@ -66,9 +66,10 @@ finally
 ```
 
 `Value` is the latest polled value; it is not a write request. Await each
-`WriteAsync` to observe the controller's write acknowledgment or a failure.
-An acknowledgment does not establish that an application workflow or motion
-has completed. A failed or interrupted write may already have reached the
+`WriteAsync` to observe the write response or a failure. Write response types are
+not yet validated beyond rejecting `SHORT_FAILED`. A response does not establish
+that a write affected an existing target or that a workflow or motion has
+completed. A failed or interrupted write may already have reached the
 controller: it is not automatically replayed.
 Subscriptions run on the polling thread, so UI consumers must marshal updates
 to their UI thread and avoid blocking callbacks.
@@ -83,6 +84,15 @@ Connecting `ExRobotIF` sends `CLRASG` before rebuilding its assignments. The
 effect of that command on other controller clients has not been verified. Give
 the wrapper a dedicated `RobotIF`; direct use of the same backend bypasses its
 assignment and lifecycle management.
+
+Reads require `SHORT_ACK` for inline data or `LONG_ACK` for extended data and
+reject other response types or insufficient payload bytes. The entire declared
+frame is received before validation. A zero-length `LONG_ACK` has no read data.
+Extra bytes in extended read responses are ignored and reported through
+`System.Diagnostics.Trace` when the library is built with `TRACE` defined;
+applications need a trace listener to capture these diagnostics. Short responses
+expose a fixed six-byte payload, so padding cannot always be distinguished from
+actual data.
 
 # Automated tests
 
