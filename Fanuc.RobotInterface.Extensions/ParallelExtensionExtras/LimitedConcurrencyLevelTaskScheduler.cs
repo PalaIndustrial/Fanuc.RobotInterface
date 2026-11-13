@@ -15,7 +15,7 @@ namespace System.Threading.Tasks.Schedulers;
 /// Provides a task scheduler that ensures a maximum concurrency level while
 /// running on top of the ThreadPool.
 /// </summary>
-public class LimitedConcurrencyLevelTaskScheduler : TaskScheduler
+internal class LimitedConcurrencyLevelTaskScheduler : TaskScheduler
 {
     /// <summary>Whether the current thread is processing work items.</summary>
     [ThreadStatic]

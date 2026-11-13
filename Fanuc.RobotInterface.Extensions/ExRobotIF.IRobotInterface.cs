@@ -5,6 +5,7 @@ namespace Fanuc.RobotInterface
     public partial class ExRobotIF : IRobotIF, INotifyPropertyChanged
     {
         public bool IsConnected => _Robot.IsConnected;
+        public string Host => _Robot.Host;
 
         public void Connect(string host, ushort port = RobotIF.DEFAULT_PORT, int timeout = RobotIF.DEFAULT_TIMEOUT)
             => ConnectAsync(host, port, timeout).Wait();
@@ -23,7 +24,6 @@ namespace Fanuc.RobotInterface
         }
 
         public void ClearAlarm() => _InvokeIfConnected(() => _Robot.ClearAlarm()).Wait();
-        public void ResetAlarm() => _InvokeIfConnected(() => _Robot.ResetAlarm()).Wait();
 
         public bool[] ReadDI(int index, ushort count) => AsyncReadDI(index, count).Result;
         public bool[] ReadDO(int index, ushort count) => AsyncReadDO(index, count).Result;
@@ -38,7 +38,5 @@ namespace Fanuc.RobotInterface
         public void WriteSNPX(int index, params byte[] values) => AsyncWriteSNPX(index, values).Wait();
         public void WriteCommand(string command) => AsyncWriteCommand(command).Wait();
 
-        public string ExecuteKCL(string command) => AsyncExecuteKCL(command).Result;
-        public string ExecuteKarel(string program) => AsyncExecuteKarel(program).Result;
     }
 }

@@ -8,7 +8,7 @@ using System.Linq;
 
 namespace Fanuc.RobotInterface.Collections;
 
-public class RobotDataDictionary<TKey, TValue> : IRobotDataDictionary<TKey, TValue>, INotifyPropertyChanged, INotifyCollectionChanged
+internal class RobotDataDictionary<TKey, TValue> : IRobotDataDictionary<TKey, TValue>, INotifyPropertyChanged, INotifyCollectionChanged
 {
     private readonly ObservableConcurrentDictionary<TKey, TValue> _Items = new ObservableConcurrentDictionary<TKey, TValue>();
 
