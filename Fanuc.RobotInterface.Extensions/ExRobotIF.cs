@@ -16,15 +16,15 @@ namespace Fanuc.RobotInterface
 
         private void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-        private readonly IRobotIF _Robot;
+        private readonly RobotIF _Robot;
 
         private TaskFactory _TaskFactory;
         private Thread _WatcherThread;
         private CancellationTokenSource _CancellationTokenSource = new CancellationTokenSource();
 
-        public ExRobotIF(IRobotIF robot)
+        public ExRobotIF(RobotIF robot)
         {
-            _Robot = robot;
+            _Robot = robot ?? throw new ArgumentNullException(nameof(robot));
             _CancellationTokenSource.Cancel();
 
             SDI = new RobotDataDictionary<int, RobotSignalHolderBase<bool>>(index => new DigitalInputHolder(this, index, IRobotIFExtension.OFFSET_SDIO));

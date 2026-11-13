@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Globalization;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -10,6 +11,21 @@ namespace FANUCRobotTest.Tests;
 [TestClass]
 public sealed class ConverterTests
 {
+    [TestMethod]
+    public void ConnectionDefaultsMatchRobotInterface()
+    {
+        var properties = TypeDescriptor.GetProperties(typeof(App.SettingsT));
+        var port = (DefaultValueAttribute?)properties[nameof(App.SettingsT.RobotPort)]?
+            .Attributes[typeof(DefaultValueAttribute)];
+        var timeout = (DefaultValueAttribute?)properties[nameof(App.SettingsT.RobotTimeout)]?
+            .Attributes[typeof(DefaultValueAttribute)];
+
+        Assert.IsNotNull(port);
+        Assert.IsNotNull(timeout);
+        Assert.AreEqual((ushort)RobotIF.DEFAULT_PORT, port.Value);
+        Assert.AreEqual(RobotIF.DEFAULT_TIMEOUT, timeout.Value);
+    }
+
     [STATestMethod]
     public void InvertedBooleanBindingUpdatesTarget()
     {

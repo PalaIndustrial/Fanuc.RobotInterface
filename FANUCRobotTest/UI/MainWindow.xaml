@@ -7,6 +7,7 @@
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     xmlns:local="clr-namespace:FANUCRobotTest"
     xmlns:local_ui="clr-namespace:FANUCRobotTest.UI"
+    xmlns:robot="clr-namespace:Fanuc.RobotInterface;assembly=Fanuc.RobotInterface"
     xmlns:sys="clr-namespace:System;assembly=System.Runtime"
     ExtendsContentIntoTitleBar="True"
     mc:Ignorable="d"
@@ -32,7 +33,6 @@
 
         <Grid Grid.Row="0" Margin="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="120"/>
                 <ColumnDefinition Width="120"/>
@@ -40,43 +40,32 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0" Margin="2">
-                <TextBlock Text="Impl:" />
-                <ComboBox
-                    HorizontalAlignment="Stretch" VerticalContentAlignment="Center"
-                    IsEnabled="{Binding Robot.IsConnected, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:MainWindow}}, Converter={StaticResource BooleanInvertConverter}}"
-                    SelectedValue="{Binding Robot, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:MainWindow}}}"
-                    SelectedValuePath="Tag">
-                    <ComboBoxItem Tag="{Binding OfficialIF, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:MainWindow}}, Mode=OneTime}">Official</ComboBoxItem>
-                    <ComboBoxItem Tag="{Binding RobotIF, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:MainWindow}}, Mode=OneTime}">Open Source</ComboBoxItem>
-                </ComboBox>
-            </StackPanel>
-            <StackPanel Grid.Column="1" Margin="2">
                 <TextBlock Text="Host:" />
                 <ui:TextBox VerticalContentAlignment="Center" PlaceholderText="127.0.0.2"
                     IsEnabled="{Binding Robot.IsConnected, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:MainWindow}}, Converter={StaticResource BooleanInvertConverter}}"
                     Text="{Binding Settings.RobotHost, Source={x:Static local:App.Current}, UpdateSourceTrigger=PropertyChanged, Delay=500, Mode=TwoWay}" />
             </StackPanel>
-            <StackPanel Grid.Column="2" Margin="3">
+            <StackPanel Grid.Column="1" Margin="3">
                 <TextBlock Text="Port:" />
                 <ui:TextBox VerticalContentAlignment="Center"
-                    PlaceholderText="{Binding Source={x:Static local:OfficialIF.DEFAULT_ROBOTIF_PORT}, Mode=OneTime}"
+                    PlaceholderText="{Binding Source={x:Static robot:RobotIF.DEFAULT_PORT}, Mode=OneTime}"
                     IsEnabled="{Binding Robot.IsConnected, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:MainWindow}}, Converter={StaticResource BooleanInvertConverter}}"
                     Text="{Binding Settings.RobotPort, Source={x:Static local:App.Current}, UpdateSourceTrigger=PropertyChanged, Delay=500, Mode=TwoWay}" />
             </StackPanel>
-            <StackPanel Grid.Column="3" Margin="2">
+            <StackPanel Grid.Column="2" Margin="2">
                 <TextBlock Text="Timeout:" />
                 <ui:TextBox VerticalContentAlignment="Center"
-                    PlaceholderText="{Binding Source={x:Static local:OfficialIF.DEFAULT_TIMEOUT}, Mode=OneTime}"
+                    PlaceholderText="{Binding Source={x:Static robot:RobotIF.DEFAULT_TIMEOUT}, Mode=OneTime}"
                     IsEnabled="{Binding Robot.IsConnected, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:MainWindow}}, Converter={StaticResource BooleanInvertConverter}}"
                     Text="{Binding Settings.RobotTimeout, Source={x:Static local:App.Current}, UpdateSourceTrigger=PropertyChanged, Delay=500, Mode=TwoWay}" />
             </StackPanel>
         
             <Button
-                Grid.Column="4" Margin="2,2,2,4" HorizontalAlignment="Stretch" VerticalAlignment="Bottom"
+                Grid.Column="3" Margin="2,2,2,4" HorizontalAlignment="Stretch" VerticalAlignment="Bottom"
                 Visibility="{Binding Robot.IsConnected, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:MainWindow}}, Converter={StaticResource BooleanToHiddenVisibleConverter}}" 
                 Content="_Connect" Click="Button_ConnectDisconnect_Click"/>
             <Button 
-                Grid.Column="4" Margin="2,2,2,4" HorizontalAlignment="Stretch" VerticalAlignment="Bottom"
+                Grid.Column="3" Margin="2,2,2,4" HorizontalAlignment="Stretch" VerticalAlignment="Bottom"
                 Visibility="{Binding Robot.IsConnected, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:MainWindow}}, Converter={StaticResource BooleanToVisibleHiddenConverter}}"
                 Content="_Disconnect" Click="Button_ConnectDisconnect_Click"/>
         

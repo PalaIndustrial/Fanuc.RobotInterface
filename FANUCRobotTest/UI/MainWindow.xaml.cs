@@ -33,7 +33,6 @@ namespace FANUCRobotTest.UI
 
         public SettingsT Settings { get; } = new SettingsT("Settings.MainWindow.json");
 
-        public IExRobotIF OfficialIF { get; } = new ExRobotIF(new OfficialIF());
         public IExRobotIF RobotIF { get; } = new ExRobotIF(new RobotIF());
 
         public static readonly DependencyProperty RobotProperty = DependencyProperty.Register(nameof(Robot), typeof(IExRobotIF), typeof(MainWindow), new PropertyMetadata(null));
@@ -48,7 +47,6 @@ namespace FANUCRobotTest.UI
         }
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            //Robot = OfficialIF;
             Robot = RobotIF;
 
             //var proto = new ServiceRequestTransferProtocol();

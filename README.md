@@ -43,8 +43,7 @@ finally
 # Automated tests
 
 The solution includes separate MSTest projects for the libraries and the WPF
-application. The desktop project currently requires FANUC COM components and
-Visual Studio MSBuild.
+application.
 
 # Disclaimer
 

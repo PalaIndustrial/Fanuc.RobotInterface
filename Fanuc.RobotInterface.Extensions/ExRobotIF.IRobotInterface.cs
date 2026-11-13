@@ -5,7 +5,7 @@ namespace Fanuc.RobotInterface
     public partial class ExRobotIF : IRobotIF, INotifyPropertyChanged
     {
         public bool IsConnected => _Robot.IsConnected;
-        public string Host => _Robot.Host;
+        public string Host => ((IRobotIF)_Robot).Host;
 
         public void Connect(string host, ushort port = RobotIF.DEFAULT_PORT, int timeout = RobotIF.DEFAULT_TIMEOUT)
             => ConnectAsync(host, port, timeout).Wait();

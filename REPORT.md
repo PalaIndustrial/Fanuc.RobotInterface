@@ -23,7 +23,7 @@ controller command, or UI binding.
 | `Fanuc.SRTP` | SRTP packet models and serialization | `net48`, `netstandard2.0`, `net10.0` |
 | `Fanuc.RobotInterface` | `IRobotIF`, synchronous `RobotIF`, I/O and HTTP extensions, robot data models | `net48`, `netstandard2.0`, `net10.0` |
 | `Fanuc.RobotInterface.Extensions` | `IExRobotIF`, `ExRobotIF`, signal/data holders, dictionaries and scheduler | `net48`, `netstandard2.0`, `net10.0` |
-| `FANUCRobotTest` | Interactive WPF application with native and official COM-backed interfaces | `net10.0-windows10.0.18362.0` |
+| `FANUCRobotTest` | Interactive WPF application using `RobotIF` | `net10.0-windows10.0.18362.0` |
 
 - `Directory.Build.props` sets shared version `3.0.4` and library revision `0`,
   producing library version `3.0.4.0`. README and migration documentation use
@@ -32,7 +32,7 @@ controller command, or UI binding.
 - Extended interface types retain the `Fanuc.RobotInterface` namespace despite
   moving to the Extensions assembly. SRTP types use `Fanuc.SRTP`.
 - `IRobotIF.Host` is required. `RobotIF` implements it explicitly; `ExRobotIF`
-  and the desktop application's `OfficialIF` expose public properties.
+  exposes a public property.
 - `ExecuteKCL`, `ExecuteKarel`, and `ResetAlarm` are core extension methods,
   not `IRobotIF` instance members. `ClearAlarm` remains an interface member.
 - Dictionaries report their actual count and forward collection/property
@@ -47,10 +47,7 @@ using `C:\Users\Palatis\.dotnet\Palatis.snk` in shared properties and again in
 `Fanuc.SRTP.csproj`; a different machine needs an appropriate key or explicit
 build-property overrides. Changing signing changes assembly identity.
 
-The desktop application additionally references the `FRRJIf` and `FRRobotIFLib`
-COM type libraries. Building or running it is not equivalent to building just
-the managed libraries and requires the relevant installed components.
-It uses WPF-UI, not ModernWpf.
+The desktop application targets Windows and uses WPF-UI, not ModernWpf.
 
 ## Connection and shutdown behavior
 
@@ -86,8 +83,9 @@ cancellation or an `IDisposable` lifecycle contract.
 Sources: `Fanuc.RobotInterface.Extensions\ExRobotIF.cs`,
 `ExRobotIF.IRobotInterface.cs`, and `ExRobotIF.Data.cs`.
 
-- The constructor accepts an `IRobotIF`, so the wrapper can be exercised with a
-  fake backend independently of the real TCP implementation.
+- The constructor accepts a non-null `RobotIF`, not an arbitrary `IRobotIF`.
+  The caller can still retain and use the same instance directly, so exclusive
+  session ownership is not enforced.
 - `ConnectAsync` returns an already-completed task when connected. Otherwise it
   creates a new single-concurrency scheduler, cancellation source and task
   factory, and schedules the synchronous backend connection.
@@ -125,9 +123,8 @@ helpers; calling the synchronous extension methods directly bypasses that
 scheduler. `RobotIF.Host` remains populated after disconnect, so an HTTP call
 can still target the previous controller.
 
-`FANUCRobotTest\UI\MainWindow.xaml.cs` defaults to
-`new ExRobotIF(new RobotIF())` and also constructs the official COM-backed
-alternative. Its button handler connects/disconnects synchronously on the UI
+`FANUCRobotTest\UI\MainWindow.xaml.cs` uses `new ExRobotIF(new RobotIF())`.
+Its button handler connects/disconnects synchronously on the UI
 thread. Closing the window calls `Disconnect` before application shutdown.
 Long-running connection or queued I/O can therefore delay UI response or exit.
 
@@ -184,10 +181,9 @@ the triggering conditions, not observed production incidents.
 - A task timeout or cancellation of pending tasks does not terminate an executing
   synchronous connect/receive. Merely wrapping work in a timed wait would leave
   the underlying operation running.
-- Testability is not all-or-nothing. The wrapper already accepts `IRobotIF`;
-  the core can be tested using a local TCP server without changing its API.
-  A transport abstraction would make deterministic fault injection easier,
-  but is not required for all protocol tests.
+- The wrapper now accepts only `RobotIF`; both layers can be tested using a local
+  TCP server without changing their APIs. A transport abstraction could make
+  deterministic fault injection easier but is not required for all protocol tests.
 
 ## Recommended next work
 
@@ -206,8 +202,8 @@ the triggering conditions, not observed production incidents.
    so newer values cannot lose their dirty state.
 5. **Input contracts:** consistently validate address ranges, byte/word alignment
    and payload limits across reads, writes and direct SNPX calls.
-6. **Regression coverage:** use a fake `IRobotIF` for wrapper failures/reconnects,
-   and a local TCP server for fragmented headers/payloads, mid-payload EOF,
+6. **Regression coverage:** use a local TCP server for wrapper failures/reconnects,
+   fragmented headers/payloads, mid-payload EOF,
    truncated responses and protocol correlation. Cover boundary I/O preservation,
    assignment reset and concurrent holder updates without a physical robot.
 
@@ -223,5 +219,5 @@ they do not replace controller interlocks or other machine-safety mechanisms.
   and desktop application. Baseline tests passed on .NET Framework 4.8, .NET 8
   (using .NET Standard 2.0 assets), .NET 10, and Windows/.NET 10 respectively.
   This is initial coverage, not verification of the findings above.
-- No live robot connection, COM integration test, or runtime fault-injection
+- No live robot connection or runtime fault-injection
   test was performed.

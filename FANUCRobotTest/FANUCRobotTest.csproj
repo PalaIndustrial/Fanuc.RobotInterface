@@ -10,27 +10,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <COMReference Include="FRRJIf">
-      <WrapperTool>tlbimp</WrapperTool>
-      <VersionMinor>15</VersionMinor>
-      <VersionMajor>42</VersionMajor>
-      <Guid>347ae5e2-b639-4527-b2ec-9d4f4dc4e7a9</Guid>
-      <Lcid>0</Lcid>
-      <Isolated>false</Isolated>
-      <EmbedInteropTypes>true</EmbedInteropTypes>
-    </COMReference>
-    <COMReference Include="FRRobotIFLib">
-      <WrapperTool>tlbimp</WrapperTool>
-      <VersionMinor>0</VersionMinor>
-      <VersionMajor>1</VersionMajor>
-      <Guid>e84cc822-360d-4712-90ff-ee4c8c1e0b19</Guid>
-      <Lcid>0</Lcid>
-      <Isolated>false</Isolated>
-      <EmbedInteropTypes>true</EmbedInteropTypes>
-    </COMReference>
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="WPF-UI" Version="4.3.0" />
   </ItemGroup>

@@ -55,6 +55,21 @@ public sealed class LibraryTests
         Assert.AreEqual(2, second.Index);
     }
 
+    [TestMethod]
+    public void ExtendedInterfaceRequiresRobotIF()
+    {
+        var constructors = typeof(ExRobotIF).GetConstructors();
+        Assert.HasCount(1, constructors);
+        var parameters = constructors[0].GetParameters();
+        Assert.HasCount(1, parameters);
+        Assert.AreEqual(typeof(RobotIF), parameters[0].ParameterType);
+
+        var robot = new ExRobotIF(new RobotIF());
+        Assert.IsFalse(robot.IsConnected);
+        Assert.IsNull(robot.Host);
+        Assert.ThrowsExactly<ArgumentNullException>(() => new ExRobotIF(null!));
+    }
+
 #if NET8_0
     [TestMethod]
     public void Net8ConsumesNetStandardLibraryAssets()

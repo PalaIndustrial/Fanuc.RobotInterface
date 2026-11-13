@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+﻿using Fanuc.RobotInterface;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
 
@@ -15,12 +16,12 @@ namespace FANUCRobotTest
 
             [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             private ushort _RobotPort;
-            [DefaultValue(OfficialIF.DEFAULT_ROBOTIF_PORT)]
+            [DefaultValue((ushort)RobotIF.DEFAULT_PORT)]
             public ushort RobotPort { get => _RobotPort; set => SetProperty(ref _RobotPort, value); }
 
             [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             private int _RobotTimeout;
-            [DefaultValue(OfficialIF.DEFAULT_TIMEOUT)]
+            [DefaultValue(RobotIF.DEFAULT_TIMEOUT)]
             public int RobotTimeout { get => _RobotTimeout; set => SetProperty(ref _RobotTimeout, value); }
 
             [DebuggerBrowsable(DebuggerBrowsableState.Never)]

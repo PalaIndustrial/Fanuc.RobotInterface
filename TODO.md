@@ -8,8 +8,8 @@ order and impact, not a change to the report's severity assessment or a
 machine-safety classification. All items are open; source findings have not yet
 been reproduced against a robot or simulated controller.
 
-Each fix should include focused regression coverage. Establish a fake `IRobotIF`
-backend and a local TCP-server test harness alongside the first relevant fixes;
+Each fix should include focused regression coverage. Establish a local TCP-server
+test harness alongside the first relevant fixes;
 the new library and desktop test projects currently provide baseline coverage,
 not those harnesses. `FANUCRobotTest` remains an interactive application.
 
@@ -100,9 +100,9 @@ not those harnesses. `FANUCRobotTest` remains an interactive application.
   inputs and documented local-build steps. Preserve release assembly identity;
   do not commit signing keys or silently disable release signing.
 - [ ] **[LOW] T18 - Document and verify the build/integration matrix.**
-  Separate managed-library builds from Windows/COM desktop requirements.
+  Separate managed-library builds from Windows desktop requirements.
   Record coverage for `net48`, `netstandard2.0`, and `net10.0`, and distinguish
-  automated fake/TCP tests from manual COM/controller checks. One successful
+  automated TCP tests from manual controller checks. One successful
   workspace build is not evidence that every target and integration was tested.
 
 ## NICETOHAVE
@@ -111,8 +111,7 @@ These are optional design improvements, not additional confirmed defects.
 
 - [ ] **[NICETOHAVE] T19 - Consider an injectable core transport.**
   If the local TCP harness cannot conveniently exercise partial sends or other
-  faults, introduce a small transport seam for deterministic fault injection.
-  Reuse `IRobotIF` injection for wrapper tests instead of duplicating it.
+  faults, consider a small transport seam for deterministic fault injection.
 - [ ] **[NICETOHAVE] T20 - Consider task-based polling and nonblocking I/O.**
   After lifecycle behavior is covered, evaluate cancellable task-based polling,
   truly asynchronous transport/HTTP operations, and an explicit disposal
