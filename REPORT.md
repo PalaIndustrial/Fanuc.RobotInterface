@@ -5,9 +5,9 @@ Reviewed: 2026-11-13
 ## Scope and evidence
 
 This report describes the current working tree, not the `v3.0.4` tag.
-The reviewed source baseline is commit `39b8931`, with local solution-item
-changes present. Findings below are based on source inspection; failure
-scenarios have not been reproduced against a robot or a simulated controller.
+Since the original review at commit `39b8931`, the transport and extended
+lifecycle have been revised and exercised with local TCP test servers. These
+tests are not a substitute for verification against an actual controller.
 Severity describes potential application reliability and data-integrity impact,
 not a machine-safety certification.
 
@@ -56,15 +56,14 @@ The desktop application targets Windows and uses WPF-UI, not ModernWpf.
 Source: `Fanuc.RobotInterface\RobotIF.cs`, especially `Connect`, `Disconnect`,
 `SendInternal`, `ReceiveInternal`, and `SendReceiveInternal`.
 
-1. `Connect` rejects an already-connected instance and calls `Disconnect`.
-2. It creates a `TcpClient`, sets receive/send timeouts and `NoDelay`, then
-   calls synchronous `TcpClient.Connect(host, port)`.
-3. After TCP connection succeeds, it stores the client and host, resets the
-   sequence number, and exchanges `INIT` and `UNKNOWN_8` packets.
-4. It rejects `SHORT_FAILED` responses but does not comprehensively validate
+1. `Connect` serializes connection attempts with complete protocol operations.
+   It publishes the new client for interruption, configures it, then calls
+   synchronous `TcpClient.Connect(host, port)`.
+2. It resets the sequence number and exchanges `INIT` and `UNKNOWN_8` packets.
+3. It rejects `SHORT_FAILED` responses but does not comprehensively validate
    response identity or expected payload shape.
-5. Exceptions inside the connection block trigger `Disconnect` and are wrapped
-   in an `IOException`. Successful completion raises `IsConnected` notification.
+4. On failure it disposes the client and wraps the error in an `IOException`.
+   Successful completion raises `IsConnected` notification.
 
 The default port is 60008 and the default I/O timeout is 10,000 ms.
 The timeout configures synchronous socket send/receive operations, including
@@ -72,11 +71,15 @@ those used for the SRTP handshake. It does **not** configure the TCP connect
 deadline or an overall handshake deadline. Zero permits unbounded socket I/O;
 invalid timeout values may fail during socket configuration.
 
-`IsConnected` reads `TcpClient.Connected`; it is not a heartbeat or a guarantee
-that the next operation will succeed. `Disconnect` only closes, disposes, and
-clears the client when that property currently reports true. It does not clear
-the stored host. Neither the core interface nor implementation exposes
-cancellation or an `IDisposable` lifecycle contract.
+`IsConnected` requires a completed handshake and reads `TcpClient.Connected`;
+it is not a heartbeat or a guarantee that the next operation will succeed.
+`Disconnect` detaches and disposes the client without waiting for the operation
+lock, allowing blocked socket I/O to be interrupted. Queued operations cannot
+cross into a later connection. An incomplete send or receive invalidates the
+connection, preventing a delayed response from being mistaken for a later
+request's acknowledgment. The stored host remains after disconnect.
+Neither the core interface nor implementation exposes caller cancellation or
+an `IDisposable` lifecycle contract.
 
 ### Extended `ExRobotIF`
 
@@ -86,30 +89,27 @@ Sources: `Fanuc.RobotInterface.Extensions\ExRobotIF.cs`,
 - The constructor accepts a non-null `RobotIF`, not an arbitrary `IRobotIF`.
   The caller can still retain and use the same instance directly, so exclusive
   session ownership is not enforced.
-- `ConnectAsync` returns an already-completed task when connected. Otherwise it
-  creates a new single-concurrency scheduler, cancellation source and task
-  factory, and schedules the synchronous backend connection.
-- Once connected, it sends `CLRASG`, recreates assignments for existing complex
-  holders, starts a watcher thread, and raises `IsConnected` notification.
-- The watcher pushes dirty values and pulls all instantiated readable holders.
-  Holder I/O normally calls back through the wrapper's scheduled methods.
-  Thus, although the watcher thread itself is outside the scheduler, its normal
-  backend I/O is serialized with other tasks on the same factory.
-- There is no polling delay or cancellation check in the watcher loop. With no
-  holders it can busy-spin; with holders, network and scheduling work normally
-  limit the iteration rate.
-- The watcher catches update exceptions and calls `Disconnect`, without exposing
-  the original error. It is a foreground thread and is never explicitly joined.
-- `Disconnect` checks the backend connection state, schedules backend
-  disconnection, waits for it, then cancels the factory token and clears the
-  factory. It does not dispose the cancellation source or join/reset the watcher.
-- Synchronous methods block on `.Wait()` or `.Result`. The async methods schedule
-  blocking work; they are not nonblocking socket APIs.
+- `ConnectAsync` coordinates a single session. It sends `CLRASG`, resets the
+  allocator, rebuilds registered assignments and starts a background watcher.
+  Initialization failures close the session; a later connection can retry.
+- The watcher pulls instantiated holders and waits 10 ms after each pass.
+  New complex holders are assigned before their first read or write. Existing
+  holders and subscriptions survive reconnect.
+- Writable holders expose `WriteAsync`; `Value` is the latest polled value.
+  Writes are not coalesced or automatically replayed. Position and raw array
+  values are snapshotted before scheduling.
+- `Disconnect` cancels queued work, interrupts the socket, drains the scheduler
+  and joins the watcher before a later session starts. A watcher callback can
+  initiate disconnect without joining itself. Synchronous reconnect from a
+  stopping watcher is rejected; asynchronous reconnect waits for shutdown.
+- `LastError` and property notifications expose initialization, polling and
+  cleanup errors. The async methods schedule blocking work; they are not
+  nonblocking socket APIs.
 
-The token can prevent pending scheduled work from starting. It does not abort
-an executing socket operation, and callers cannot supply their own token.
-Disconnect is queued behind existing work rather than immediately interrupting
-it. Dropping a returned task does not cancel anything.
+Socket closure interrupts active transport I/O, but a blocked user callback,
+HTTP operation or TCP connect without a deadline can delay shutdown. Callers
+cannot supply their own cancellation token. Dropping a returned task does not
+cancel it.
 
 ### HTTP helpers and desktop application
 
@@ -146,9 +146,10 @@ Long-running connection or queued I/O can therefore delay UI response or exit.
   temporary 1,024-byte send cap; the committed tests do not deterministically
   force a partial `Socket.Send` return.
 
-The digital read-modify-write is still not atomic with respect to another
-caller or controller-side changes. These improvements do not establish
-thread safety for direct concurrent use of `RobotIF`.
+Digital read-modify-write is serialized with other operations on the same
+`RobotIF` instance, but is not atomic against controller-side changes or another
+client. `CLRASG` is still sent on each extended connection; its effect on other
+clients has not been verified.
 
 ## Current findings
 
@@ -157,17 +158,15 @@ the triggering conditions, not observed production incidents.
 
 | ID | Priority | Finding and consequence | Source |
 |---|---|---|---|
-| F3 | High | Cleanup depends on `IsConnected`. A client already reporting disconnected is neither disposed nor cleared. Also, the newly created client is assigned to the field only after TCP connect succeeds, so failures before that assignment leave the local client outside the catch block's cleanup path. | `RobotIF.cs`: `Connect`, `Disconnect` |
-| F4 | High | No core lock protects request/response exchanges, sequence numbers, buffers or connection transitions. Direct concurrent calls, a shared backend, or overlapping connection attempts can interleave exchanges or race disposal. Wrapper serialization covers only work using the same task factory. | `RobotIF.cs`; `ExRobotIF.cs`: `ConnectAsync` |
-| F5 | High | Extended shutdown has no watcher termination/join protocol and cannot interrupt queued or active blocking I/O. If the backend already reports disconnected, the entire cleanup body is skipped. A rapid reconnect can let an old watcher observe the new connection and continue alongside the new watcher. | `ExRobotIF.cs`: watcher loop; `ExRobotIF.IRobotInterface.cs`: `Disconnect` |
-| F6 | High | Extended initialization has no failure cleanup after backend connection. If `CLRASG` or a holder assignment fails, the connect task faults while the backend can remain connected without a watcher. A subsequent `ConnectAsync` then returns completed solely because `IsConnected` is true. | `ExRobotIF.cs`: `ConnectAsync` |
-| F7 | Medium | Watcher exceptions lose their original diagnostic information. If the backend has already become disconnected, wrapper `Disconnect` can skip both cancellation and notification. An exception thrown by cleanup itself also escapes the watcher catch. | `ExRobotIF.cs`; `ExRobotIF.IRobotInterface.cs` |
-| F8 | Medium | `AssignmentOffset` starts at 1 but is not reset when reconnect sends `CLRASG`. Repeated reconnects allocate progressively higher offsets despite clearing controller assignments; the allocator has no range check. | `ExRobotIF.Data.cs`: `AssignmentOffset`, `AsyncWriteAssignment`; `ExRobotIF.cs`: `ConnectAsync` |
+| F5 | High | Socket I/O can be interrupted and watcher overlap is prevented, but shutdown has no universal bound while TCP connect, an HTTP operation or a consumer callback remains blocked. | `ExRobotIF.cs`: `FinishStop`; `RobotIF.cs`: `Connect` |
 | F9 | Medium | Read-side range checks are weaker than write-side checks. For example, `ReadGI(65537, 1)` decrements the index and casts it to `ushort`, targeting offset zero instead of rejecting it. `WriteSNPX(0, ...)` also passes validation and casts the decremented index to 65535. | `RobotIF.cs`: `ReadGIO`, `ReadDIO`, `ReadSNPX`, `WriteSNPX` |
 | F10 | Medium | SNPX converts byte counts to word counts by integer division without rejecting odd counts. Oversized command/SNPX payload lengths and indexes are narrowed to `ushort` without complete validation. Holder-level string padding does not protect direct callers. | `RobotIF.cs`: `WriteCommand`, `WriteSNPX`, `ReadSNPX`; `Fanuc.SRTP\PacketBase.cs`: `ExtraPayload` |
 | F11 | Medium | Response checks mostly reject only `SHORT_FAILED`; they do not correlate sequence/service/segment and expected lengths. Short group reads silently leave missing values as zero; digital/SNPX reads can return fewer values than requested. | `RobotIF.cs`: handshake and read/write methods |
-| F12 | Medium | Writable holder state is unsynchronized. If a local value changes during `WriteValue`, `PushValue` can clear the dirty flag for the newer value even though only the earlier value was sent. | `ExRobotIF.Data.cs`: `_LocalUpdate`, `PushValue` |
-| F13 | Medium | An empty watcher has no wait and can consume CPU continuously. Foreground watcher lifetime also depends on successful shutdown rather than an explicit owner-managed termination contract. | `ExRobotIF.cs`: watcher creation and loop |
+| F13 | Medium | The background watcher now has a fixed 10 ms inter-pass wait, but idle CPU and active refresh cadence have not been separately measured or made configurable. | `ExRobotIF.cs`: `Watch` |
+
+F3, F4, F6, F7 and F8 were addressed by the lifecycle changes. F12's dirty
+state was removed in favor of explicit per-write tasks; a loopback test covers
+consecutive writes and their acknowledgments.
 
 `RobotIF.Refresh` and `Refresh2` additionally remain public methods that throw
 `NotImplementedException`; neither is part of `IRobotIF`.
@@ -180,11 +179,9 @@ the triggering conditions, not observed production incidents.
   to the SRTP handshake's send/receive operations.
 - Handshake responses are received and checked for `SHORT_FAILED`. The missing
   piece is comprehensive validation, not the absence of all response checks.
-- The watcher is not entirely outside I/O serialization: built-in holders route
-  normal reads and writes through the wrapper's task factory.
-- A task timeout or cancellation of pending tasks does not terminate an executing
-  synchronous connect/receive. Merely wrapping work in a timed wait would leave
-  the underlying operation running.
+- Built-in holders route normal reads and writes through the wrapper's task
+  factory. Closing the socket interrupts active socket I/O; merely timing out a
+  task would not terminate an executing synchronous operation.
 - The wrapper now accepts only `RobotIF`; both layers can be tested using a local
   TCP server without changing their APIs. A transport abstraction could make
   deterministic fault injection easier but is not required for all protocol tests.
@@ -193,33 +190,27 @@ the triggering conditions, not observed production incidents.
 
 1. **Transport correctness:** add deterministic partial-send coverage, and reject
    malformed or mismatched responses and insufficient payloads.
-2. **Lifecycle ownership:** dispose clients regardless of connection status,
-   clean up failed local connects and partial extended initialization, and
-   serialize connection state transitions as well as request/response traffic.
-3. **Cancellation and shutdown:** define an explicit watcher stop/await protocol
-   that avoids self-join, prevents overlap across reconnects, and surfaces
-   polling failures. An actual connect deadline must cancel or dispose the
-   underlying operation, not just stop waiting for its task.
-4. **Polling and holder state:** add configurable pacing or an idle wait, reset
-   and bound assignment allocation after `CLRASG`, and synchronize pending writes
-   so newer values cannot lose their dirty state.
-5. **Input contracts:** consistently validate address ranges, byte/word alignment
+2. **Cancellation and shutdown:** implement actual connect and handshake
+   deadlines and caller cancellation, and verify shutdown limits. A deadline must
+   interrupt the underlying operation, not merely stop waiting for its task.
+3. **Polling:** verify idle and active polling cadence and consider a
+   configurable interval.
+4. **Input contracts:** consistently validate address ranges, byte/word alignment
    and payload limits across reads, writes and direct SNPX calls.
-6. **Regression coverage:** extend local TCP tests for wrapper failures/reconnects,
-   response validation and protocol correlation. Cover boundary I/O preservation,
-   assignment reset and concurrent holder updates without a physical robot.
+5. **Regression coverage:** extend local TCP tests for response validation and
+   protocol correlation, and verify behavior against a controller when available.
 
 These recommendations concern application lifecycle and protocol correctness;
 they do not replace controller interlocks or other machine-safety mechanisms.
 
 ## Validation status
 
-- Findings were checked against the current source and project files.
-- The Visual Studio workspace build succeeded during this review. This does not
-  establish runtime behavior or coverage of every target/configuration.
-- Since the initial review, separate MSTest projects were added for the libraries
-  and desktop application. Baseline tests passed on .NET Framework 4.8, .NET 8
-  (using .NET Standard 2.0 assets), .NET 10, and Windows/.NET 10 respectively.
-  This is initial coverage, not verification of the findings above.
-- Local TCP tests exercise fragmented and truncated responses. No live robot
-  connection or deterministic partial-send fault injection was performed.
+- The Visual Studio workspace build succeeded. The library test runner passed
+  52 tests on .NET Framework 4.8, 53 on .NET 8 (using .NET Standard 2.0 assets),
+  and 52 on .NET 10; Test Explorer passed 15 Windows/.NET 10 desktop tests.
+  A combined Test Explorer run reported a test-storage error after reporting
+  154 passes, so the projects were verified separately.
+- Loopback tests cover transport serialization, initialization failure, blocked
+  I/O shutdown, reconnect, assignment allocation and write failure/no replay.
+  No live robot connection or deterministic partial-send fault injection was
+  performed.

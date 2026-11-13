@@ -10,16 +10,14 @@ namespace Fanuc.RobotInterface
             public uint Group { get; }
             public uint UserFrame { get; }
 
-            public RobotCurrentPositionHolder(IExRobotIF robot, uint frame = 0, uint group = 1) :
+            public RobotCurrentPositionHolder(ExRobotIF robot, uint frame = 0, uint group = 1) :
                 base(robot)
             {
                 Group = group < 1 ? 1 : group;
                 UserFrame = frame;
-                if (Robot.IsConnected)
-                    WriteAssignment();
             }
 
-            public override void WriteAssignment() => Offset = Robot.WriteAssignment(50, $"POS[G{Group}:{UserFrame}] 0.0");
+            protected override void WriteAssignment() => Offset = Robot.WriteHolderAssignment(50, $"POS[G{Group}:{UserFrame}] 0.0");
 
             protected override Position ReadValue() => Offset == -1 ? null : PositionConverter.ToPosition(Robot.ReadSNPX(Offset, 100));
         }
@@ -29,17 +27,15 @@ namespace Fanuc.RobotInterface
             public RobotTaskType TaskType { get; }
             public int Index { get; }
 
-            public RobotTaskHolder(IExRobotIF robot, int index, RobotTaskType type = RobotTaskType.All) :
+            public RobotTaskHolder(ExRobotIF robot, int index, RobotTaskType type = RobotTaskType.All) :
                 base(robot)
             {
                 TaskType = type;
                 Index = index;
-                if (Robot.IsConnected)
-                    WriteAssignment();
             }
 
-            public override void WriteAssignment() =>
-                Offset = Robot.WriteAssignment(18, _TaskTypeToAssignmentString(TaskType));
+            protected override void WriteAssignment() =>
+                Offset = Robot.WriteHolderAssignment(18, _TaskTypeToAssignmentString(TaskType));
 
             protected override RobotTaskStatus ReadValue() => Offset == -1 ? null : RobotTaskStatus.FromBytes(Robot.ReadSNPX(Offset, 36));
 
@@ -62,16 +58,14 @@ namespace Fanuc.RobotInterface
             public bool IsHistory { get; }
             public int Index { get; }
 
-            public RobotAlarmHolder(IExRobotIF robot, int index, bool history = false) :
+            public RobotAlarmHolder(ExRobotIF robot, int index, bool history = false) :
                 base(robot)
             {
                 Index = index;
                 IsHistory = history;
-                if (Robot.IsConnected)
-                    WriteAssignment();
             }
 
-            public override void WriteAssignment() => Offset = Robot.WriteAssignment(100, $"ALM[{(IsHistory ? "E" : "")}{Index}] 1");
+            protected override void WriteAssignment() => Offset = Robot.WriteHolderAssignment(100, $"ALM[{(IsHistory ? "E" : "")}{Index}] 1");
 
             protected override RobotAlarm ReadValue() => Offset == -1 ? null : RobotAlarm.FromBytes(Robot.ReadSNPX(Offset, 200));
         }

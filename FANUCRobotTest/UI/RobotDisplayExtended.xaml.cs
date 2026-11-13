@@ -352,20 +352,12 @@ namespace FANUCRobotTest.UI
         private async void Button_PosReg_Click(object sender, RoutedEventArgs e)
         {
             var button = (Button)sender;
-            var holder = (ExRobotIF.RobotWritableDataHolderBase<Position>)button.Tag;
-            var pos = new Position()
-            {
-                Cartisian = holder.Value.Cartisian,
-                Joint = holder.Value.Joint,
-                UserFrame = holder.Value.UserFrame,
-                UserTool = holder.Value.UserTool,
-            };
             try
             {
                 button.IsEnabled = false;
-
-                var dialog = new SetPositionDialog();
-                dialog.DataContext = pos;
+                var holder = (ExRobotIF.RobotWritableDataHolderBase<Position>)button.Tag;
+                var dialog = new SetPositionDialog(holder.Value);
+                var pos = dialog.Position;
                 dialog.DialogHostEx = ContentDialogHost.GetForWindow(Window.GetWindow(this))
                     ?? throw new InvalidOperationException("The window does not have a content dialog host.");
                 var result = await dialog.ShowAsync();
@@ -373,19 +365,43 @@ namespace FANUCRobotTest.UI
                 {
                     case ContentDialogResult.Primary: // joint
                         pos.Cartisian = null;
-                        holder.Value = pos;
+                        await holder.WriteAsync(pos);
                         break;
                     case ContentDialogResult.Secondary: // cartisian
                         pos.Joint = null;
-                        holder.Value = pos;
+                        await holder.WriteAsync(pos);
                         break;
                     case ContentDialogResult.None:
                         break;
                 }
             }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not set position: {ex.Message}", "Write failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
             finally
             {
                 button.IsEnabled = true;
+            }
+        }
+
+        private async void WritableBool_Click(object sender, RoutedEventArgs e)
+        {
+            var checkBox = (CheckBox)sender;
+            try
+            {
+                checkBox.IsEnabled = false;
+                var holder = (IWritableValueHolder)checkBox.Tag;
+                await holder.WriteAsync(checkBox.IsChecked == true);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not write signal: {ex.Message}", "Write failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                checkBox.GetBindingExpression(CheckBox.IsCheckedProperty)?.UpdateTarget();
+                checkBox.IsEnabled = true;
             }
         }
     }

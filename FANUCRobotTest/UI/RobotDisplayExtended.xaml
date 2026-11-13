@@ -24,7 +24,8 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" SharedSizeGroup="BoolSignalSizeGroup" />
                 </Grid.ColumnDefinitions>
-                <CheckBox Margin="2" IsChecked="{Binding Value.Value, Mode=TwoWay}">
+                <CheckBox Margin="2" IsChecked="{Binding Value.Value, Mode=OneWay}"
+                        Tag="{Binding Value}" Click="WritableBool_Click">
                     <CheckBox.Content>
                         <TextBlock>
                             <Run
@@ -46,8 +47,8 @@
                             Text="{Binding SignalName, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:RobotIndexDataDisplayControl}}}" />[<Run
                             Text="{Binding Value.Index, Mode=OneWay}" />]:
                 </TextBlock>
-                <TextBox Grid.Column="1" Margin="2" VerticalContentAlignment="Center"
-                        Text="{Binding Value.Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Delay=500}" />
+                <local_ui:WritableTextBox Grid.Column="1" Margin="2" VerticalContentAlignment="Center"
+                        ValueType="Word" Holder="{Binding Value}" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="WritableNumericTemplate">
@@ -61,8 +62,8 @@
                             Text="{Binding SignalName, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:RobotIndexDataDisplayControl}}}" />[<Run
                             Text="{Binding Value.Index, Mode=OneWay}" />]:
                 </TextBlock>
-                <TextBox Grid.Column="1" Margin="2" VerticalContentAlignment="Center"
-                        Text="{Binding Value.Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Delay=500, StringFormat=\{0:0.000\}}" />
+                <local_ui:WritableTextBox Grid.Column="1" Margin="2" VerticalContentAlignment="Center"
+                        ValueType="Numeric" Holder="{Binding Value}" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="WritablePositionTemplate">
@@ -118,8 +119,8 @@
                             Text="{Binding SignalName, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local_ui:RobotIndexDataDisplayControl}}, Mode=OneTime}" />[<Run
                             Text="{Binding Value.Index, Mode=OneTime}" />]:
                 </TextBlock>
-                <TextBox Grid.Column="1" Margin="2"
-                        Text="{Binding Value.Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Delay=500}" />
+                <local_ui:WritableTextBox Grid.Column="1" Margin="2"
+                        ValueType="String" Holder="{Binding Value}" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="KeyIntegerTemplate">
@@ -131,8 +132,8 @@
                 <TextBlock Grid.Column="0" Padding="4,2" Margin="2" VerticalAlignment="Center">
                     <Run Text="{Binding Value.Key, Mode=OneTime}" />:
                 </TextBlock>
-                <TextBox Grid.Column="1" Margin="2"
-                        Text="{Binding Value.Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Delay=500}" />
+                <local_ui:WritableTextBox Grid.Column="1" Margin="2"
+                        ValueType="Integer" Holder="{Binding Value}" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="KeyStringTemplate">
@@ -144,8 +145,8 @@
                 <TextBlock Grid.Column="0" Padding="4,2" Margin="2" VerticalAlignment="Center">
                     <Run Text="{Binding Value.Key, Mode=OneTime}" />:
                 </TextBlock>
-                <TextBox Grid.Column="1" Margin="2"
-                        Text="{Binding Value.Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Delay=500}" />
+                <local_ui:WritableTextBox Grid.Column="1" Margin="2"
+                        ValueType="String" Holder="{Binding Value}" />
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="KeyPositionTemplate">

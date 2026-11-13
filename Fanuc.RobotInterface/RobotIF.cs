@@ -13,76 +13,134 @@ namespace Fanuc.RobotInterface
         public const int DEFAULT_PORT = 60008;
         public const int DEFAULT_TIMEOUT = 10000;
 
+        // Disconnect only takes StateLock, so it can close a socket blocked in an operation.
+        private readonly object OperationLock = new object();
+        private readonly object StateLock = new object();
         private TcpClient TcpClient;
+        private bool ConnectionReady;
+        private long ConnectionVersion;
+        private bool FailureNotificationPending;
 
-        public bool IsConnected => TcpClient?.Connected ?? false;
+        public bool IsConnected
+        {
+            get
+            {
+                lock (StateLock)
+                    return ConnectionReady && (TcpClient?.Connected ?? false);
+            }
+        }
 
         private byte SequenceNumber;
         private string Host;
-        string IRobotIF.Host => Host;
+        string IRobotIF.Host
+        {
+            get
+            {
+                lock (StateLock)
+                    return Host;
+            }
+        }
 
         public void Connect(string host, ushort port, int timeout)
         {
-            if (IsConnected)
-                throw new IOException("Already connected.");
-
-            try
+            long version;
+            lock (StateLock)
+                version = ConnectionVersion;
+            lock (OperationLock)
             {
-                Disconnect(); // call disconnect to clean-up states before we connect.
-
-                var client = new TcpClient
+                TcpClient client = null;
+                bool published = false;
+                TcpClient oldClient;
+                lock (StateLock)
                 {
-                    ReceiveTimeout = timeout,
-                    SendTimeout = timeout
-                };
-                client.Client.NoDelay = true;
-                client.Connect(host, port);
-
-                TcpClient = client;
-                Host = host;
-
-                SequenceNumber = 0;
-
-                {
-                    var rr = SendReceiveInternal(new ShortRequestPacket()
-                    {
-                        SequenceNumber = SequenceNumber++,
-                        PacketType = PacketType.INIT,
-                        MessageType = 0,
-                        Unknown_8 = 0,
-                        Unknown_16 = 0,
-                    });
-
-                    // TODO: validate received packet
-                    if (rr.MessageType == MessageType.SHORT_FAILED)
-                        throw new IOException($"Request {PacketType.INIT} error! Wrong data received.");
+                    if (version != ConnectionVersion)
+                        throw new IOException("Connection changed while waiting to connect.");
+                    if (ConnectionReady && (TcpClient?.Connected ?? false))
+                        throw new IOException("Already connected.");
+                    oldClient = TcpClient;
+                    TcpClient = null;
+                    ConnectionReady = false;
+                    version = ++ConnectionVersion;
                 }
-
+                try
                 {
-                    var rr = SendReceiveInternal(new ShortRequestPacket()
+                    oldClient?.Dispose();
+
+                    client = new TcpClient();
+                    lock (StateLock)
                     {
-                        PacketType = PacketType.UNKNOWN_8,
-                        SequenceNumber = SequenceNumber++,
+                        if (version != ConnectionVersion)
+                            throw new IOException("Connection was cancelled.");
+                        TcpClient = client;
+                        published = true;
+                    }
+                    client.ReceiveTimeout = timeout;
+                    client.SendTimeout = timeout;
+                    client.Client.NoDelay = true;
+                    client.Connect(host, port);
 
-                        MailboxSource = 0x00000000,         // FIXME: magic!
-                        MailboxDestination = 0x00000e10,    // FIXME: magic!
-                        PacketNumber = 1,                   // always 1
-                        TotalPacketNumber = 1,              // always 1
+                    SequenceNumber = 0;
 
-                        ServiceRequestCode = ServiceRequestCode.INIT,
-                        SegmentSelector = SegmentSelector.INIT,
-                    });
+                    {
+                        var rr = SendReceiveInternal(new ShortRequestPacket()
+                        {
+                            SequenceNumber = SequenceNumber++,
+                            PacketType = PacketType.INIT,
+                            MessageType = 0,
+                            Unknown_8 = 0,
+                            Unknown_16 = 0,
+                        });
 
-                    // TODO: validate received packet
-                    if (rr.MessageType == MessageType.SHORT_FAILED)
-                        throw new IOException($"Request {PacketType.UNKNOWN_8} error! Wrong data received.");
+                        // TODO: validate received packet
+                        if (rr.MessageType == MessageType.SHORT_FAILED)
+                            throw new IOException($"Request {PacketType.INIT} error! Wrong data received.");
+                    }
+
+                    {
+                        var rr = SendReceiveInternal(new ShortRequestPacket()
+                        {
+                            PacketType = PacketType.UNKNOWN_8,
+                            SequenceNumber = SequenceNumber++,
+
+                            MailboxSource = 0x00000000,         // FIXME: magic!
+                            MailboxDestination = 0x00000e10,    // FIXME: magic!
+                            PacketNumber = 1,                   // always 1
+                            TotalPacketNumber = 1,              // always 1
+
+                            ServiceRequestCode = ServiceRequestCode.INIT,
+                            SegmentSelector = SegmentSelector.INIT,
+                        });
+
+                        // TODO: validate received packet
+                        if (rr.MessageType == MessageType.SHORT_FAILED)
+                            throw new IOException($"Request {PacketType.UNKNOWN_8} error! Wrong data received.");
+                    }
+
+                    lock (StateLock)
+                    {
+                        if (version != ConnectionVersion || TcpClient != client)
+                            throw new IOException("Connection was cancelled.");
+                        Host = host;
+                        ConnectionReady = true;
+                    }
                 }
-
-            }
-            catch (Exception ex)
-            {
-                Disconnect();
-                throw new IOException($"Connecting to {host}:{port} failed.", ex);
+                catch (Exception ex)
+                {
+                    bool dispose = !published;
+                    lock (StateLock)
+                    {
+                        if (TcpClient == client && client != null)
+                        {
+                            TcpClient = null;
+                            ConnectionReady = false;
+                            ++ConnectionVersion;
+                            dispose = true;
+                        }
+                    }
+                    if (dispose)
+                        client?.Dispose();
+                    throw new IOException($"Connecting to {host}:{port} failed.", ex);
+                }
             }
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsConnected)));
         }
@@ -91,20 +149,81 @@ namespace Fanuc.RobotInterface
 
         public void Disconnect()
         {
-            if (IsConnected)
+            TcpClient client;
+            bool notify;
+            lock (StateLock)
             {
-                TcpClient?.Close();
-                TcpClient?.Dispose();
+                client = TcpClient;
                 TcpClient = null;
-
+                notify = ConnectionReady;
+                ConnectionReady = false;
+                ++ConnectionVersion;
+            }
+            client?.Dispose();
+            if (notify)
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsConnected)));
+        }
+
+        private T RunOperation<T>(Func<T> operation)
+        {
+            // A queued operation belongs to the connection observed when it was called.
+            long version;
+            bool ready;
+            lock (StateLock)
+            {
+                version = ConnectionVersion;
+                ready = ConnectionReady;
+            }
+            bool notify = false;
+            Exception failure = null;
+            try
+            {
+                lock (OperationLock)
+                {
+                    try
+                    {
+                        lock (StateLock)
+                            if (version != ConnectionVersion || (!ready && ConnectionReady))
+                                throw new IOException("Connection changed while waiting for the operation.");
+                        return operation();
+                    }
+                    finally
+                    {
+                        notify = FailureNotificationPending;
+                        FailureNotificationPending = false;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+                throw;
+            }
+            finally
+            {
+                if (notify)
+                {
+                    try { PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsConnected))); }
+                    catch (Exception ex)
+                    {
+                        if (failure != null)
+                            throw new AggregateException("Transport operation and disconnect notification failed.", failure, ex);
+                        throw;
+                    }
+                }
             }
         }
+
+        private void RunOperation(Action operation) =>
+            RunOperation(() => { operation(); return true; });
 
         public void ClearAlarm() => WriteCommand("CLRALM");
 
         #region IO
         internal bool[] ReadDIO(SegmentSelector selector, int index, ushort count)
+            => RunOperation(() => ReadDIOCore(selector, index, count));
+
+        private bool[] ReadDIOCore(SegmentSelector selector, int index, ushort count)
         {
             if (index < 1)
                 throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
@@ -156,6 +275,9 @@ namespace Fanuc.RobotInterface
         public bool[] ReadDO(int index, ushort count) => ReadDIO(SegmentSelector.BIT_I, index, count);
 
         private ushort[] ReadGIO(SegmentSelector selector, int index, ushort count)
+            => RunOperation(() => ReadGIOCore(selector, index, count));
+
+        private ushort[] ReadGIOCore(SegmentSelector selector, int index, ushort count)
         {
             if (index < 1)
                 throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
@@ -193,6 +315,9 @@ namespace Fanuc.RobotInterface
         public ushort[] ReadGO(int index, ushort count) => ReadGIO(SegmentSelector.WORD_AI, index, count);
 
         private void WriteDIO(SegmentSelector selector, int index, params bool[] values)
+            => RunOperation(() => WriteDIOCore(selector, index, values));
+
+        private void WriteDIOCore(SegmentSelector selector, int index, bool[] values)
         {
             if (index < 1)
                 throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
@@ -214,7 +339,7 @@ namespace Fanuc.RobotInterface
             Array.Copy(values, 0, bools, front, count);
             if (front > 0)
             {
-                var existing = ReadDIO(selector, (int)first + 1, 8);
+                var existing = ReadDIOCore(selector, (int)first + 1, 8);
                 if (existing.Length != 8)
                     throw new IOException($"Read {selector} returned insufficient data for the write.");
                 Array.Copy(existing, 0, bools, 0, front);
@@ -223,7 +348,7 @@ namespace Fanuc.RobotInterface
             }
             if (back > 0 && (front == 0 || len != 8))
             {
-                var existing = ReadDIO(selector, (int)last - 7, 8);
+                var existing = ReadDIOCore(selector, (int)last - 7, 8);
                 if (existing.Length != 8)
                     throw new IOException($"Read {selector} returned insufficient data for the write.");
                 Array.Copy(existing, 8 - back, bools, bools.Length - back, back);
@@ -286,6 +411,9 @@ namespace Fanuc.RobotInterface
         public void WriteDO(int index, params bool[] values) => WriteDIO(SegmentSelector.BIT_I, index, values);
 
         private void WriteGIO(SegmentSelector selector, int index, params ushort[] values)
+            => RunOperation(() => WriteGIOCore(selector, index, values));
+
+        private void WriteGIOCore(SegmentSelector selector, int index, ushort[] values)
         {
             if (index < 1)
                 throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
@@ -346,6 +474,9 @@ namespace Fanuc.RobotInterface
 
         #region DataTable
         public void WriteCommand(string command)
+            => RunOperation(() => WriteCommandCore(command));
+
+        private void WriteCommandCore(string command)
         {
             if (string.IsNullOrEmpty(command))
                 throw new IOException("Cannot send empty command.");
@@ -393,6 +524,9 @@ namespace Fanuc.RobotInterface
         }
 
         public void WriteSNPX(int index, params byte[] values)
+            => RunOperation(() => WriteSNPXCore(index, values));
+
+        private void WriteSNPXCore(int index, byte[] values)
         {
             var count = values.Length;
             if (count == 0)
@@ -444,6 +578,9 @@ namespace Fanuc.RobotInterface
         }
 
         public byte[] ReadSNPX(int index, ushort count)
+            => RunOperation(() => ReadSNPXCore(index, count));
+
+        private byte[] ReadSNPXCore(int index, ushort count)
         {
             if (index < 1)
                 throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
@@ -520,9 +657,43 @@ namespace Fanuc.RobotInterface
 
         private IResponsePacket SendReceiveInternal(IRequestPacket packet)
         {
-            var socket = TcpClient?.Client ?? throw new IOException("Cannot send a request when not connected.");
-            SendInternal(socket, packet);
-            var received = ReceiveInternal(socket);
+            TcpClient client;
+            Socket socket;
+            lock (StateLock)
+            {
+                client = TcpClient;
+                socket = client?.Client ?? throw new IOException("Cannot send a request when not connected.");
+            }
+            byte[] received;
+            try
+            {
+                SendInternal(socket, packet);
+                received = ReceiveInternal(socket);
+            }
+            catch (Exception failure)
+            {
+                bool dispose = false;
+                lock (StateLock)
+                {
+                    if (TcpClient == client)
+                    {
+                        TcpClient = null;
+                        FailureNotificationPending = ConnectionReady;
+                        ConnectionReady = false;
+                        ++ConnectionVersion;
+                        dispose = true;
+                    }
+                }
+                if (dispose)
+                {
+                    try { client.Dispose(); }
+                    catch (Exception cleanup)
+                    {
+                        throw new AggregateException("Transport operation and client cleanup failed.", failure, cleanup);
+                    }
+                }
+                throw;
+            }
             return received.Length <= PacketBase.HEADER_LENGTH
                 ? new ShortResponsePacket(received)
                 : new ExtendedResponsePacket(received);

@@ -12,28 +12,25 @@ namespace Fanuc.RobotInterface
             public int Index { get; }
 
 
-            public RobotRegisterHolderBase(IExRobotIF robot, int index) :
+            public RobotRegisterHolderBase(ExRobotIF robot, int index) :
                 base(robot)
             {
                 Index = index;
-                if (robot.IsConnected)
-                    WriteAssignment();
             }
         }
 
         private class RobotNumericRegisterHolder : RobotRegisterHolderBase<float>
         {
-            public RobotNumericRegisterHolder(IExRobotIF robot, int index) :
+            public RobotNumericRegisterHolder(ExRobotIF robot, int index) :
                 base(robot, index)
             {
             }
 
-            public override void WriteAssignment() => Offset = Robot.WriteAssignment(2, $"R[{Index}] 0");
+            protected override void WriteAssignment() => Offset = Robot.WriteHolderAssignment(2, $"R[{Index}] 0");
 
             protected override void WriteValue(float value)
             {
-                if (Offset != -1)
-                    Robot.WriteSNPX(Offset, BitConverter.GetBytes(value));
+                Robot.WriteSNPX(Offset, BitConverter.GetBytes(value));
             }
 
             protected override float ReadValue() => Offset == -1 ? default : BitConverter.ToSingle(Robot.ReadSNPX(Offset, 4), 0);
@@ -41,47 +38,32 @@ namespace Fanuc.RobotInterface
 
         private class RobotPositionRegisterHolder : RobotRegisterHolderBase<Position>
         {
-            public RobotPositionRegisterHolder(IExRobotIF robot, int index) :
+            public RobotPositionRegisterHolder(ExRobotIF robot, int index) :
                 base(robot, index)
             {
             }
 
-            public override void WriteAssignment() => Offset = Robot.WriteAssignment(50, $"PR[{Index}] 0.0");
+            protected override void WriteAssignment() => Offset = Robot.WriteHolderAssignment(50, $"PR[{Index}] 0.0");
 
-            protected override void WriteValue(Position value)
-            {
-                if (value.Cartisian != null)
-                {
-                    Robot.WriteSNPX(Offset, PositionConverter.GetBytes(value));
-                }
-                else if (value.Joint != null)
-                {
-                    Robot.WriteSNPX(Offset + 26, PositionConverter.GetBytes(value));
-                }
-                else
-                    throw new NotImplementedException();
-            }
+            protected override Action PrepareWrite(Position value) => PreparePositionWrite(Robot, () => Offset, value);
+            protected override void WriteValue(Position value) => PrepareWrite(value)();
 
             protected override Position ReadValue() => Offset == -1 ? null : PositionConverter.ToPosition(Robot.ReadSNPX(Offset, 100));
         }
 
         private class RobotStringRegisterHolder : RobotRegisterHolderBase<string>
         {
-            public override string Value { get => base.Value; set => base.Value = value.Length > 80 ? value.Substring(0, 80) : value; }
-
-            public RobotStringRegisterHolder(IExRobotIF robot, int index) :
+            public RobotStringRegisterHolder(ExRobotIF robot, int index) :
                 base(robot, index)
             {
             }
 
-            public override void WriteAssignment() => Offset = Robot.WriteAssignment(40, $"SR[{Index}] 1");
+            protected override void WriteAssignment() => Offset = Robot.WriteHolderAssignment(40, $"SR[{Index}] 1");
 
             protected override string ReadValue() => Offset == -1 ? null : Encoding.ASCII.GetString(Robot.ReadSNPX(Offset, 80));
 
             protected override void WriteValue(string value)
             {
-                if (Offset == -1)
-                    return;
                 var bytes = Encoding.ASCII.GetBytes(value);
                 if (bytes.Length % 2 == 1)
                     bytes = bytes.Concat(new byte[1]).ToArray();

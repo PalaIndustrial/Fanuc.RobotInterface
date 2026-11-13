@@ -1,4 +1,6 @@
-﻿namespace Fanuc.RobotInterface;
+﻿using System.Threading.Tasks;
+
+namespace Fanuc.RobotInterface;
 
 public interface IValueHolder
 {
@@ -7,7 +9,7 @@ public interface IValueHolder
 
 public interface IWritableValueHolder : IValueHolder
 {
-    new object Value { get; set; }
+    Task WriteAsync(object value);
 }
 
 public interface IValueHolder<T> : IValueHolder
@@ -17,5 +19,5 @@ public interface IValueHolder<T> : IValueHolder
 
 public interface IWritableValueHolder<T> : IValueHolder<T>, IWritableValueHolder
 {
-    new T Value { get; set; }
+    Task WriteAsync(T value);
 }

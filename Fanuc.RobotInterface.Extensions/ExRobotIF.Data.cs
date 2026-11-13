@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -11,14 +12,16 @@ namespace Fanuc.RobotInterface
         {
             [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             private T _RemoteValue;
-            public T Value => _RemoteValue;
+            private readonly object _ValueLock = new object();
+            private long _ValueVersion;
+            public T Value { get { lock (_ValueLock) return _RemoteValue; } }
             object IValueHolder.Value => Value;
 
-            protected IExRobotIF Robot { get; }
+            protected ExRobotIF Robot { get; }
 
-            public RobotDataHolderBase(IExRobotIF robot)
+            public RobotDataHolderBase(ExRobotIF robot)
             {
-                Robot = robot;
+                Robot = robot ?? throw new ArgumentNullException(nameof(robot));
             }
 
             public event PropertyChangedEventHandler PropertyChanged;
@@ -26,105 +29,158 @@ namespace Fanuc.RobotInterface
 
             protected virtual void RemoteUpdate(T value)
             {
-                if (EqualityComparer<T>.Default.Equals(_RemoteValue, value)) return;
-                _RemoteValue = value;
+                while (true)
+                {
+                    T current;
+                    long version;
+                    lock (_ValueLock)
+                    {
+                        current = _RemoteValue;
+                        version = _ValueVersion;
+                    }
+                    var equal = EqualityComparer<T>.Default.Equals(current, value);
+                    lock (_ValueLock)
+                    {
+                        if (version != _ValueVersion)
+                            continue;
+                        if (equal)
+                            return;
+                        _RemoteValue = value;
+                        ++_ValueVersion;
+                    }
+                    break;
+                }
                 RaisePropertyChanged(nameof(Value));
             }
 
-            public void PullValue() => RemoteUpdate(ReadValue());
+            void IRobotValueHolder.PullValue()
+            {
+                var result = Robot._InvokeIfConnected(Robot.CaptureReadySession(), () =>
+                {
+                    Session session;
+                    lock (Robot._LifecycleLock)
+                    {
+                        session = Robot._Session;
+                        if (session == null || !session.Ready || session.Stopping)
+                            throw new System.IO.IOException("Cannot read a holder when not connected.");
+                    }
+                    if (this is IRobotComplexDataHolder complex)
+                        complex.EnsureAssignment();
+                    return Tuple.Create(session, ReadValue());
+                }).GetAwaiter().GetResult();
+                lock (Robot._LifecycleLock)
+                {
+                    if (!ReferenceEquals(Robot._Session, result.Item1) || result.Item1.Stopping)
+                        return;
+                }
+                RemoteUpdate(result.Item2);
+            }
 
             protected abstract T ReadValue();
         }
 
         public abstract class RobotWritableDataHolderBase<T> : RobotDataHolderBase<T>, IWritableValueHolder<T>, IRobotWritableValueHolder
         {
-            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
-            private T _LocalValue;
-            public new virtual T Value { get => base.Value; set => _LocalUpdate(value); }
-            T IWritableValueHolder<T>.Value { get => Value; set => Value = value; }
-            object IWritableValueHolder.Value { get => Value; set => Value = (T)value; }
-
-            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
-            private bool _IsDirty;
-            public bool IsDirty { get => _IsDirty; }
-
-            public RobotWritableDataHolderBase(IExRobotIF robot) :
+            public RobotWritableDataHolderBase(ExRobotIF robot) :
                 base(robot)
             {
             }
 
-            protected void _LocalUpdate(T value)
+            public async Task WriteAsync(T value)
             {
-                _LocalValue = value;
-                if (!Equals(_IsDirty, !Equals(_LocalValue, Value)))
+                var session = Robot.CaptureReadySession();
+                if (session == null)
+                    throw new System.IO.IOException("Cannot write a holder when not connected.");
+                var write = PrepareWrite(value);
+                await Robot._InvokeIfConnected(session, () =>
                 {
-                    _IsDirty = !Equals(_LocalValue, Value);
-                    RaisePropertyChanged(nameof(IsDirty));
-                }
+                    if (this is IRobotComplexDataHolder complex)
+                        complex.EnsureAssignment();
+                    write();
+                    return true;
+                }, nameof(WriteAsync)).ConfigureAwait(false);
             }
 
-            protected override void RemoteUpdate(T value)
-            {
-                if (!IsDirty)
-                    _LocalValue = value;
-                base.RemoteUpdate(value);
-            }
+            Task IWritableValueHolder.WriteAsync(object value) => WriteAsync((T)value);
 
-            public void PushValue()
-            {
-                if (IsDirty)
-                {
-                    WriteValue(_LocalValue);
-                    if (_IsDirty)
-                    {
-                        _IsDirty = false;
-                        RaisePropertyChanged(nameof(IsDirty));
-                    }
-                }
-            }
-
+            protected virtual Action PrepareWrite(T value) => () => WriteValue(value);
             protected abstract void WriteValue(T value);
         }
 
-        internal int AssignmentOffset { get; set; } = 1;
-        public Task<int> AsyncWriteAssignment(int length, string target) =>
-            _InvokeIfConnected(() =>
-            {
-                _Robot.WriteCommand($"SETASG {AssignmentOffset} {length} {target}");
-                var n = AssignmentOffset;
-                AssignmentOffset += length;
-                return n;
-            });
-
-        public int WriteAssignment(int length, string target) => AsyncWriteAssignment(length, target).Result;
-
-        public interface IRobotComplexDataHolder
+        private static Action PreparePositionWrite(ExRobotIF robot, Func<int> offset, Position value)
         {
-            void WriteAssignment();
+            if (value == null)
+                throw new ArgumentNullException(nameof(value));
+            var displacement = value.Cartisian != null ? 0 : 26;
+            var bytes = PositionConverter.GetBytes(value);
+            return () => robot.WriteSNPX(offset() + displacement, bytes);
+        }
+
+        internal int AssignmentOffset { get; set; } = 1;
+        private int WriteAssignmentCore(int length, string target)
+        {
+            if (length <= 0)
+                throw new ArgumentOutOfRangeException(nameof(length));
+            if (AssignmentOffset < 1 || length > 65537 - AssignmentOffset)
+                throw new InvalidOperationException("The SNPX assignment range is exhausted.");
+            _WriteAssignmentCommand($"SETASG {AssignmentOffset} {length} {target}");
+            var n = AssignmentOffset;
+            AssignmentOffset += length;
+            return n;
+        }
+
+        private int WriteHolderAssignment(int length, string target) => WriteAssignmentCore(length, target);
+
+        public Task<int> AsyncWriteAssignment(int length, string target) =>
+            _InvokeIfConnected(CaptureReadySession(), () => WriteAssignmentCore(length, target));
+
+        private interface IRobotComplexDataHolder
+        {
+            void EnsureAssignment();
         }
 
         public abstract class RobotComplexDataHolderBase<T> : RobotDataHolderBase<T>, IRobotComplexDataHolder
         {
             protected int Offset { get; set; } = -1;
 
-            public RobotComplexDataHolderBase(IExRobotIF robot) :
+            private long _AssignmentGeneration = -1;
+
+            public RobotComplexDataHolderBase(ExRobotIF robot) :
                 base(robot)
             {
             }
 
-            public abstract void WriteAssignment();
+            protected abstract void WriteAssignment();
+
+            void IRobotComplexDataHolder.EnsureAssignment()
+            {
+                if (_AssignmentGeneration == Robot.AssignmentGeneration)
+                    return;
+                WriteAssignment();
+                _AssignmentGeneration = Robot.AssignmentGeneration;
+            }
         }
 
         public abstract class RobotWritableComplexDataHolderBase<T> : RobotWritableDataHolderBase<T>, IRobotComplexDataHolder
         {
             protected int Offset { get; set; } = -1;
 
-            protected RobotWritableComplexDataHolderBase(IExRobotIF robot) :
+            private long _AssignmentGeneration = -1;
+
+            protected RobotWritableComplexDataHolderBase(ExRobotIF robot) :
                 base(robot)
             {
             }
 
-            public abstract void WriteAssignment();
+            protected abstract void WriteAssignment();
+
+            void IRobotComplexDataHolder.EnsureAssignment()
+            {
+                if (_AssignmentGeneration == Robot.AssignmentGeneration)
+                    return;
+                WriteAssignment();
+                _AssignmentGeneration = Robot.AssignmentGeneration;
+            }
         }
 
         private IEnumerable<IRobotWritableValueHolder> AllWritableSignals

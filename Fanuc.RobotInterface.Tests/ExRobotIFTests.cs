@@ -9,6 +9,21 @@ namespace Fanuc.RobotInterface.Tests;
 public sealed class ExRobotIFTests
 {
     [TestMethod]
+    public async Task DisconnectedOperationsReportTheirCaller()
+    {
+        var robot = new ExRobotIF(new RobotIF());
+
+        var readError = await Assert.ThrowsExactlyAsync<IOException>(() => robot.AsyncReadDI(1, 1));
+        StringAssert.Contains(readError.Message, nameof(ExRobotIF.AsyncReadDI));
+
+        var writeError = await Assert.ThrowsExactlyAsync<IOException>(() => robot.AsyncWriteCommand("CLRALM"));
+        StringAssert.Contains(writeError.Message, nameof(ExRobotIF.AsyncWriteCommand));
+
+        var clearError = Assert.ThrowsExactly<IOException>(robot.ClearAlarm);
+        StringAssert.Contains(clearError.Message, nameof(ExRobotIF.ClearAlarm));
+    }
+
+    [TestMethod]
 #pragma warning disable MSTEST0045 // Bound the test even if synchronous socket code stops responding.
     [Timeout(10000)]
 #pragma warning restore MSTEST0045

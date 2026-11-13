@@ -43,6 +43,47 @@ finally
 }
 ```
 
+For managed SNPX assignments, use `ExRobotIF`. Holders can be registered before
+or after connecting and retained across reconnects:
+
+```csharp
+var robot = new ExRobotIF(new RobotIF());
+robot.R[1].PropertyChanged += (_, e) =>
+{
+    if (e.PropertyName == nameof(IValueHolder<float>.Value))
+        Console.WriteLine(robot.R[1].Value);
+};
+
+try
+{
+    await robot.ConnectAsync("192.168.1.10", 60008, 10000);
+    await robot.R[1].WriteAsync(42f);
+}
+finally
+{
+    robot.Disconnect();
+}
+```
+
+`Value` is the latest polled value; it is not a write request. Await each
+`WriteAsync` to observe the controller's write acknowledgment or a failure.
+An acknowledgment does not establish that an application workflow or motion
+has completed. A failed or interrupted write may already have reached the
+controller: it is not automatically replayed.
+Subscriptions run on the polling thread, so UI consumers must marshal updates
+to their UI thread and avoid blocking callbacks.
+
+Polling and initialization failures are exposed through `LastError` and
+`PropertyChanged` notifications. `Disconnect()` interrupts active socket I/O
+and waits for the watcher; a callback that blocks can still delay shutdown.
+The async methods schedule synchronous I/O and do not provide a TCP connect
+deadline or caller cancellation.
+
+Connecting `ExRobotIF` sends `CLRASG` before rebuilding its assignments. The
+effect of that command on other controller clients has not been verified. Give
+the wrapper a dedicated `RobotIF`; direct use of the same backend bypasses its
+assignment and lifecycle management.
+
 # Automated tests
 
 The solution includes separate MSTest projects for the libraries and the WPF

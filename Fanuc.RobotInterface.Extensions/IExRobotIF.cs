@@ -1,10 +1,12 @@
 using Fanuc.RobotInterface.Collections;
+using System;
 using System.Threading.Tasks;
 
 namespace Fanuc.RobotInterface
 {
     public interface IExRobotIF : IRobotIF
     {
+        Exception LastError { get; }
         IRobotDataDictionary<int, ExRobotIF.RobotSignalHolderBase<bool>> SDI { get; }
         IRobotDataDictionary<int, ExRobotIF.RobotSignalHolderBase<bool>> SDO { get; }
         IRobotDataDictionary<int, ExRobotIF.RobotSignalHolderBase<bool>> RDI { get; }
@@ -53,6 +55,5 @@ namespace Fanuc.RobotInterface
         Task AsyncWriteCommand(string command);
 
         Task<int> AsyncWriteAssignment(int length, string target);
-        int WriteAssignment(int length, string target);
     }
 }

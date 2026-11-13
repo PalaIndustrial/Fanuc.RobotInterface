@@ -1,7 +1,6 @@
 using Fanuc.RobotInterface.Collections;
 using System;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -18,14 +17,58 @@ namespace Fanuc.RobotInterface
 
         private readonly RobotIF _Robot;
 
-        private TaskFactory _TaskFactory;
-        private Thread _WatcherThread;
-        private CancellationTokenSource _CancellationTokenSource = new CancellationTokenSource();
+        private readonly object _LifecycleLock = new object();
+        private Session _Session;
+        private Exception _LastError;
+        private long _ConnectVersion;
+        [ThreadStatic] private static CallbackScope _CallbackScope;
+
+        private sealed class CallbackScope : IDisposable
+        {
+            public readonly Session Session;
+            public readonly CallbackScope Previous;
+            public CallbackScope(Session session)
+            {
+                Session = session;
+                Previous = _CallbackScope;
+                _CallbackScope = this;
+            }
+            public void Dispose() => _CallbackScope = Previous;
+        }
+
+        private static bool IsInCallback(Session session)
+        {
+            for (var scope = _CallbackScope; scope != null; scope = scope.Previous)
+                if (ReferenceEquals(scope.Session, session))
+                    return true;
+            return false;
+        }
+
+        private sealed class Session
+        {
+            public readonly CancellationTokenSource Cancellation = new CancellationTokenSource();
+            public readonly TaskScheduler Scheduler = new LimitedConcurrencyLevelTaskScheduler(1);
+            public readonly TaskCompletionSource<bool> Ended = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            public readonly TaskCompletionSource<bool> Notified = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            public TaskFactory Factory;
+            public Task Initialization;
+            public Task ConnectTask;
+            public Thread Watcher;
+            public bool Ready;
+            public bool Stopping;
+            public bool NotifyErrorReset;
+            public int Publications;
+            public TaskCompletionSource<bool> PublicationsDrained;
+            public Exception Error;
+            public Exception CleanupError;
+        }
+
+        internal long AssignmentGeneration { get; private set; }
+        public Exception LastError { get { lock (_LifecycleLock) return _LastError; } }
 
         public ExRobotIF(RobotIF robot)
         {
             _Robot = robot ?? throw new ArgumentNullException(nameof(robot));
-            _CancellationTokenSource.Cancel();
 
             SDI = new RobotDataDictionary<int, RobotSignalHolderBase<bool>>(index => new DigitalInputHolder(this, index, IRobotIFExtension.OFFSET_SDIO));
             SDO = new RobotDataDictionary<int, RobotSignalHolderBase<bool>>(index => new DigitalOutputHolder(this, index, IRobotIFExtension.OFFSET_SDIO));
@@ -62,90 +105,322 @@ namespace Fanuc.RobotInterface
 
         public Task ConnectAsync(string host, ushort port = RobotIF.DEFAULT_PORT, int timeout = RobotIF.DEFAULT_TIMEOUT)
         {
-            if (IsConnected)
-                return Task.CompletedTask;
-
-            var scheduler = new LimitedConcurrencyLevelTaskScheduler(1);
-            _CancellationTokenSource = new CancellationTokenSource();
-            _TaskFactory = new TaskFactory(_CancellationTokenSource.Token, TaskCreationOptions.None, TaskContinuationOptions.None, scheduler);
-
-            return _TaskFactory.StartNew(() =>
+            lock (_LifecycleLock)
             {
-                _Robot.Connect(host, port, timeout);
-                if (_Robot.IsConnected)
+                if (_Session != null)
                 {
-                    _Robot.WriteCommand("CLRASG");
-                    foreach (var v in AllReadableSignals)
-                    {
-                        if (v is IRobotComplexDataHolder c)
-                            c.WriteAssignment();
-                    }
-
-                    _WatcherThread = new Thread(() =>
-                    {
-#if DEBUG
-                        var sw1 = Stopwatch.StartNew();
-                        var sw2 = new Stopwatch();
-                        var i = 0;
-#endif
-                        while (_Robot.IsConnected)
-                        {
-                            try
-                            {
-#if DEBUG
-                                ++i;
-                                sw2.Start();
-#endif
-
-                                foreach (var v in AllWritableSignals)
-                                    v.PushValue();
-                                foreach (var v in AllReadableSignals)
-                                    v.PullValue();
-
-#if DEBUG
-                                sw2.Stop();
-
-                                if (sw1.ElapsedMilliseconds > 1000)
-                                {
-                                    Debug.WriteLine($"{i} updates took {sw2.ElapsedMilliseconds}ms, average = {sw2.ElapsedMilliseconds / i}ms");
-                                    sw1.Reset();
-                                    sw2.Reset();
-                                    sw1.Start();
-                                    i = 0;
-                                }
-#endif
-                            }
-                            catch
-                            {
-                                Disconnect();
-                            }
-                        }
-                    });
-                    _WatcherThread.Start();
+                    if (_Session.Stopping)
+                        return ConnectAfterStopAsync(_Session, host, port, timeout, _ConnectVersion);
+                    if (!_Session.Ready && TaskScheduler.Current == _Session.Scheduler)
+                        return Task.FromException(new InvalidOperationException("Cannot connect from initialization."));
+                    return _Session.ConnectTask;
                 }
-                OnPropertyChanged(nameof(IsConnected));
-            });
+
+                var session = new Session();
+                session.Factory = new TaskFactory(session.Cancellation.Token, TaskCreationOptions.None,
+                    TaskContinuationOptions.None, session.Scheduler);
+                _Session = session;
+                session.NotifyErrorReset = _LastError != null;
+                _LastError = null;
+                session.Initialization = session.Factory.StartNew(() => Initialize(session, host, port, timeout));
+                session.ConnectTask = Task.Run(() => CompleteConnectAsync(session));
+                return session.ConnectTask;
+            }
         }
 
-        private Task _InvokeIfConnected(Action action, [CallerMemberName] string caller = "Unknown") =>
-            _TaskFactory?.StartNew(action) ?? Task.FromException(new IOException($"Cannot invoke `{caller}()` when not connected."));
-        private Task<T> _InvokeIfConnected<T>(Func<T> func, [CallerMemberName] string caller = "Unknown") =>
-            _TaskFactory?.StartNew(func) ?? Task.FromException<T>(new IOException($"Cannot invoke `{caller}()` when not connected."));
+        private async Task ConnectAfterStopAsync(Session session, string host, ushort port, int timeout, long version)
+        {
+            await session.Ended.Task.ConfigureAwait(false);
+            Task connect;
+            lock (_LifecycleLock)
+            {
+                if (version != _ConnectVersion)
+                    throw new OperationCanceledException("The pending connection was canceled by disconnect.");
+                connect = ConnectAsync(host, port, timeout);
+            }
+            await connect.ConfigureAwait(false);
+        }
 
-        public Task<bool[]> AsyncReadDI(int index, ushort count) => _InvokeIfConnected(() => _Robot.ReadDI(index, count));
-        public Task<bool[]> AsyncReadDO(int index, ushort count) => _InvokeIfConnected(() => _Robot.ReadDO(index, count));
-        public Task<ushort[]> AsyncReadGI(int index, ushort count) => _InvokeIfConnected(() => _Robot.ReadGI(index, count));
-        public Task<ushort[]> AsyncReadGO(int index, ushort count) => _InvokeIfConnected(() => _Robot.ReadGO(index, count));
-        public Task AsyncWriteDI(int index, params bool[] values) => _InvokeIfConnected(() => _Robot.WriteDI(index, values));
-        public Task AsyncWriteDO(int index, params bool[] values) => _InvokeIfConnected(() => _Robot.WriteDO(index, values));
-        public Task AsyncWriteGI(int index, params ushort[] values) => _InvokeIfConnected(() => _Robot.WriteGI(index, values));
-        public Task AsyncWriteGO(int index, params ushort[] values) => _InvokeIfConnected(() => _Robot.WriteGO(index, values));
+        private void Initialize(Session session, string host, ushort port, int timeout)
+        {
+            session.Cancellation.Token.ThrowIfCancellationRequested();
+            _Robot.Connect(host, port, timeout);
+            session.Cancellation.Token.ThrowIfCancellationRequested();
+            _Robot.WriteCommand("CLRASG");
+            AssignmentOffset = 1;
+            AssignmentGeneration++;
+            foreach (var holder in AllReadableSignals)
+            {
+                session.Cancellation.Token.ThrowIfCancellationRequested();
+                if (holder is IRobotComplexDataHolder complex)
+                    complex.EnsureAssignment();
+            }
+            session.Cancellation.Token.ThrowIfCancellationRequested();
+        }
 
-        public Task<byte[]> AsyncReadSNPX(int index, ushort count) => _InvokeIfConnected(() => _Robot.ReadSNPX(index, count));
-        public Task AsyncWriteSNPX(int index, params byte[] values) => _InvokeIfConnected(() => _Robot.WriteSNPX(index, values));
-        public Task AsyncWriteCommand(string command) => _InvokeIfConnected(() => _Robot.WriteCommand(command));
+        private async Task CompleteConnectAsync(Session session)
+        {
+            try
+            {
+                await session.Initialization.ConfigureAwait(false);
+                lock (_LifecycleLock)
+                {
+                    if (session.Stopping)
+                        throw new OperationCanceledException();
+                    session.Watcher = new Thread(() => Watch(session)) { IsBackground = true };
+                    session.Ready = true;
+                    session.Watcher.Start();
+                }
+                if (!EnterPublication(session))
+                    throw new OperationCanceledException();
+                try
+                {
+                    using (new CallbackScope(session))
+                    {
+                        if (session.NotifyErrorReset)
+                            OnPropertyChanged(nameof(LastError));
+                        OnPropertyChanged(nameof(IsConnected));
+                        if (IsStopping(session))
+                            throw new OperationCanceledException();
+                    }
+                }
+                finally { LeavePublication(session); }
+            }
+            catch (Exception ex)
+            {
+                var stopping = IsStopping(session);
+                StartStop(session, stopping ? null : ex);
+                await session.Notified.Task.ConfigureAwait(false);
+                if (!stopping && session.Error != null && !ReferenceEquals(session.Error, ex))
+                    throw session.Error;
+                throw;
+            }
+        }
 
-        public Task<string> AsyncExecuteKCL(string command) => _InvokeIfConnected(() => _Robot.ExecuteKCL(command));
-        public Task<string> AsyncExecuteKarel(string program) => _InvokeIfConnected(() => _Robot.ExecuteKarel(program));
+        private bool IsStopping(Session session)
+        {
+            lock (_LifecycleLock) return session.Stopping;
+        }
+
+        private void Watch(Session session)
+        {
+            try
+            {
+                while (!session.Cancellation.IsCancellationRequested)
+                {
+                    if (!_Robot.IsConnected)
+                        throw new IOException("Robot connection lost.");
+                    foreach (var holder in AllReadableSignals)
+                    {
+                        session.Cancellation.Token.ThrowIfCancellationRequested();
+                        holder.PullValue();
+                    }
+                    if (session.Cancellation.Token.WaitHandle.WaitOne(10))
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                if (!IsStopping(session))
+                    StartStop(session, ex);
+            }
+        }
+
+        private void StartStop(Session session, Exception error)
+        {
+            lock (_LifecycleLock)
+            {
+                if (session.Stopping)
+                {
+                    if (error != null)
+                        session.Error = Combine(session.Error, error);
+                    return;
+                }
+                session.Stopping = true;
+                session.Ready = false;
+                session.Error = error;
+            }
+
+            Exception cleanupError = null;
+            using (new CallbackScope(session))
+            {
+                try { session.Cancellation.Cancel(); }
+                catch (Exception ex) { cleanupError = ex; }
+                try { _Robot.Disconnect(); }
+                catch (Exception ex) { cleanupError = Combine(cleanupError, ex); }
+            }
+            Task.Run(() => FinishStop(session, cleanupError));
+        }
+
+        private void FinishStop(Session session, Exception cleanupError)
+        {
+            try
+            {
+                using (new CallbackScope(session))
+                {
+                    // Connect can install its socket just after the first interrupt.
+                    while (!session.Initialization.IsCompleted)
+                    {
+                        try { _Robot.Disconnect(); }
+                        catch (Exception ex) { cleanupError = Combine(cleanupError, ex); }
+                        try { session.Initialization.Wait(20); }
+                        catch (AggregateException) { break; }
+                    }
+                    try { _Robot.Disconnect(); }
+                    catch (Exception ex) { cleanupError = Combine(cleanupError, ex); }
+                }
+                try
+                {
+                    Task.Factory.StartNew(() => { }, CancellationToken.None,
+                        TaskCreationOptions.None, session.Scheduler).GetAwaiter().GetResult();
+                }
+                catch (Exception ex) { cleanupError = Combine(cleanupError, ex); }
+                WaitForPublications(session).GetAwaiter().GetResult();
+                try { session.Watcher?.Join(); }
+                catch (Exception ex) { cleanupError = Combine(cleanupError, ex); }
+                session.Error = Combine(session.Error, cleanupError);
+                session.CleanupError = cleanupError;
+                lock (_LifecycleLock)
+                {
+                    _LastError = session.Error;
+                }
+            }
+            finally
+            {
+                session.Cancellation.Dispose();
+            }
+            Exception notificationError = null;
+            using (new CallbackScope(session))
+            {
+                try
+                {
+                    if (session.Error != null)
+                        OnPropertyChanged(nameof(LastError));
+                }
+                catch (Exception ex) { notificationError = ex; }
+                try { OnPropertyChanged(nameof(IsConnected)); }
+                catch (Exception ex) { notificationError = Combine(notificationError, ex); }
+            }
+            if (notificationError != null)
+            {
+                session.CleanupError = Combine(session.CleanupError, notificationError);
+                session.Error = Combine(session.Error, notificationError);
+                lock (_LifecycleLock)
+                {
+                    if (ReferenceEquals(_Session, session))
+                        _LastError = session.Error;
+                }
+            }
+            lock (_LifecycleLock)
+            {
+                if (ReferenceEquals(_Session, session))
+                    _Session = null;
+            }
+            session.Ended.TrySetResult(true);
+            session.Notified.TrySetResult(true);
+        }
+
+        private bool EnterPublication(Session session)
+        {
+            lock (_LifecycleLock)
+            {
+                if (!ReferenceEquals(_Session, session) || !session.Ready || session.Stopping)
+                    return false;
+                ++session.Publications;
+                return true;
+            }
+        }
+
+        private void LeavePublication(Session session)
+        {
+            TaskCompletionSource<bool> drained = null;
+            lock (_LifecycleLock)
+            {
+                if (--session.Publications == 0)
+                    drained = session.PublicationsDrained;
+            }
+            drained?.TrySetResult(true);
+        }
+
+        private Task WaitForPublications(Session session)
+        {
+            lock (_LifecycleLock)
+            {
+                if (session.Publications == 0)
+                    return Task.CompletedTask;
+                return (session.PublicationsDrained ??=
+                    new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+            }
+        }
+
+        private static Exception Combine(Exception first, Exception second) =>
+            first == null ? second : second == null ? first : new AggregateException(first, second);
+
+        private void _WriteAssignmentCommand(string command)
+        {
+            try { _Robot.WriteCommand(command); }
+            catch (Exception ex)
+            {
+                Session session;
+                lock (_LifecycleLock) session = _Session;
+                if (session != null && !IsStopping(session))
+                    StartStop(session, ex);
+                throw;
+            }
+        }
+
+        private Session CaptureReadySession()
+        {
+            lock (_LifecycleLock)
+            {
+                var session = _Session;
+                return session != null && session.Ready && !session.Stopping ? session : null;
+            }
+        }
+
+        private Task<T> _InvokeIfConnected<T>(Session expected, Func<T> func, [CallerMemberName] string caller = "Unknown")
+        {
+            lock (_LifecycleLock)
+            {
+                var session = _Session;
+                if (expected == null || !ReferenceEquals(session, expected) || session.Stopping || !session.Ready)
+                    return Task.FromException<T>(new IOException($"Cannot invoke `{caller}()` when not connected."));
+                if (TaskScheduler.Current != session.Scheduler)
+                    return session.Factory.StartNew(() =>
+                    {
+                        session.Cancellation.Token.ThrowIfCancellationRequested();
+                        return func();
+                    });
+            }
+            try { return Task.FromResult(func()); }
+            catch (Exception ex) { return Task.FromException<T>(ex); }
+        }
+
+        private Task _WriteSnapshot<T>(T[] values, Action<T[]> write, [CallerMemberName] string caller = "Unknown")
+        {
+            var session = CaptureReadySession();
+            if (session == null)
+                return Task.FromException(new IOException($"Cannot invoke `{caller}()` when not connected."));
+            var snapshot = Snapshot(values);
+            return _InvokeIfConnected(session, () => { write(snapshot); return true; }, caller);
+        }
+
+        public Task<bool[]> AsyncReadDI(int index, ushort count) => _InvokeIfConnected(CaptureReadySession(), () => _Robot.ReadDI(index, count));
+        public Task<bool[]> AsyncReadDO(int index, ushort count) => _InvokeIfConnected(CaptureReadySession(), () => _Robot.ReadDO(index, count));
+        public Task<ushort[]> AsyncReadGI(int index, ushort count) => _InvokeIfConnected(CaptureReadySession(), () => _Robot.ReadGI(index, count));
+        public Task<ushort[]> AsyncReadGO(int index, ushort count) => _InvokeIfConnected(CaptureReadySession(), () => _Robot.ReadGO(index, count));
+        public Task AsyncWriteDI(int index, params bool[] values) => _WriteSnapshot(values, snapshot => _Robot.WriteDI(index, snapshot));
+        public Task AsyncWriteDO(int index, params bool[] values) => _WriteSnapshot(values, snapshot => _Robot.WriteDO(index, snapshot));
+        public Task AsyncWriteGI(int index, params ushort[] values) => _WriteSnapshot(values, snapshot => _Robot.WriteGI(index, snapshot));
+        public Task AsyncWriteGO(int index, params ushort[] values) => _WriteSnapshot(values, snapshot => _Robot.WriteGO(index, snapshot));
+
+        public Task<byte[]> AsyncReadSNPX(int index, ushort count) => _InvokeIfConnected(CaptureReadySession(), () => _Robot.ReadSNPX(index, count));
+        public Task AsyncWriteSNPX(int index, params byte[] values) => _WriteSnapshot(values, snapshot => _Robot.WriteSNPX(index, snapshot));
+        public Task AsyncWriteCommand(string command) => _InvokeIfConnected(CaptureReadySession(), () => { _Robot.WriteCommand(command); return true; });
+
+        public Task<string> AsyncExecuteKCL(string command) => _InvokeIfConnected(CaptureReadySession(), () => _Robot.ExecuteKCL(command));
+        public Task<string> AsyncExecuteKarel(string program) => _InvokeIfConnected(CaptureReadySession(), () => _Robot.ExecuteKarel(program));
+
+        private static T[] Snapshot<T>(T[] values) => values == null ? null : (T[])values.Clone();
     }
 }

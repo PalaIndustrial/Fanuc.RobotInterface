@@ -12,23 +12,21 @@ namespace Fanuc.RobotInterface
         {
             public string Key { get; }
 
-            public RobotSystemVariableHolderBase(IExRobotIF robot, string key) :
+            public RobotSystemVariableHolderBase(ExRobotIF robot, string key) :
                 base(robot)
             {
                 Key = key;
-                if (robot.IsConnected)
-                    WriteAssignment();
             }
         }
 
         private class RobotIntegerSystemVariableHolder : RobotSystemVariableHolderBase<int>
         {
-            public RobotIntegerSystemVariableHolder(IExRobotIF robot, string key) :
+            public RobotIntegerSystemVariableHolder(ExRobotIF robot, string key) :
                 base(robot, key)
             {
             }
 
-            public override void WriteAssignment() => Offset = Robot.WriteAssignment(2, $"{Key} 1");
+            protected override void WriteAssignment() => Offset = Robot.WriteHolderAssignment(2, $"{Key} 1");
 
             protected override int ReadValue()
             {
@@ -42,19 +40,17 @@ namespace Fanuc.RobotInterface
 
         private class RobotStringSystemVariableHolder : RobotSystemVariableHolderBase<string>
         {
-            public RobotStringSystemVariableHolder(IExRobotIF robot, string key) :
+            public RobotStringSystemVariableHolder(ExRobotIF robot, string key) :
                 base(robot, key)
             {
             }
 
-            public override void WriteAssignment() => Offset = Robot.WriteAssignment(40, $"{Key} 1");
+            protected override void WriteAssignment() => Offset = Robot.WriteHolderAssignment(40, $"{Key} 1");
 
             protected override string ReadValue() => Offset == -1 ? null : Encoding.ASCII.GetString(Robot.ReadSNPX(Offset, 80));
 
             protected override void WriteValue(string value)
             {
-                if (Offset == -1)
-                    return;
                 var bytes = Encoding.ASCII.GetBytes(value);
                 if (bytes.Length % 2 == 1)
                     bytes = bytes.Concat(new byte[1]).ToArray();
@@ -64,26 +60,15 @@ namespace Fanuc.RobotInterface
 
         private class RobotPositionSystemVariableHolder : RobotSystemVariableHolderBase<Position>
         {
-            public RobotPositionSystemVariableHolder(IExRobotIF robot, string key) :
+            public RobotPositionSystemVariableHolder(ExRobotIF robot, string key) :
                 base(robot, key)
             {
             }
 
-            public override void WriteAssignment() => Offset = Robot.WriteAssignment(50, $"{Key} 0.0");
+            protected override void WriteAssignment() => Offset = Robot.WriteHolderAssignment(50, $"{Key} 0.0");
 
-            protected override void WriteValue(Position value)
-            {
-                if (value.Cartisian != null)
-                {
-                    Robot.WriteSNPX(Offset, PositionConverter.GetBytes(value));
-                }
-                else if (value.Joint != null)
-                {
-                    Robot.WriteSNPX(Offset + 26, PositionConverter.GetBytes(value));
-                }
-                else
-                    throw new NotImplementedException();
-            }
+            protected override Action PrepareWrite(Position value) => PreparePositionWrite(Robot, () => Offset, value);
+            protected override void WriteValue(Position value) => PrepareWrite(value)();
 
             protected override Position ReadValue() => Offset == -1 ? null : PositionConverter.ToPosition(Robot.ReadSNPX(Offset, 100));
         }

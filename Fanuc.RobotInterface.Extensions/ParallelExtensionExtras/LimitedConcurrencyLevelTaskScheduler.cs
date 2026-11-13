@@ -17,9 +17,9 @@ namespace System.Threading.Tasks.Schedulers;
 /// </summary>
 internal class LimitedConcurrencyLevelTaskScheduler : TaskScheduler
 {
-    /// <summary>Whether the current thread is processing work items.</summary>
+    /// <summary>The scheduler whose work items the current thread is processing.</summary>
     [ThreadStatic]
-    private static bool _currentThreadIsProcessingItems;
+    private static LimitedConcurrencyLevelTaskScheduler _currentScheduler;
     /// <summary>The list of tasks to be executed.</summary>
     private readonly LinkedList<Task> _tasks = new LinkedList<Task>(); // protected by lock(_tasks)
     /// <summary>The maximum concurrency level allowed by this scheduler.</summary>
@@ -64,7 +64,8 @@ internal class LimitedConcurrencyLevelTaskScheduler : TaskScheduler
         {
             // Note that the current thread is now processing work items.
             // This is necessary to enable inlining of tasks into this thread.
-            _currentThreadIsProcessingItems = true;
+            var previousScheduler = _currentScheduler;
+            _currentScheduler = this;
             try
             {
                 // Process all available items in the queue.
@@ -91,7 +92,7 @@ internal class LimitedConcurrencyLevelTaskScheduler : TaskScheduler
                 }
             }
             // We're done processing items on the current thread
-            finally { _currentThreadIsProcessingItems = false; }
+            finally { _currentScheduler = previousScheduler; }
         }, null);
     }
 
@@ -102,7 +103,7 @@ internal class LimitedConcurrencyLevelTaskScheduler : TaskScheduler
     protected sealed override bool TryExecuteTaskInline(Task task, bool taskWasPreviouslyQueued)
     {
         // If this thread isn't already processing a task, we don't support inlining
-        if (!_currentThreadIsProcessingItems) return false;
+        if (_currentScheduler != this) return false;
 
         // If the task was previously queued, remove it from the queue
         if (taskWasPreviouslyQueued) TryDequeue(task);

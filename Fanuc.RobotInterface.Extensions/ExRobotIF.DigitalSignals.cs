@@ -4,14 +4,13 @@ namespace Fanuc.RobotInterface
 {
     public partial class ExRobotIF
     {
-        public interface IRobotValueHolder : IValueHolder
+        private interface IRobotValueHolder : IValueHolder
         {
             void PullValue();
         }
 
-        public interface IRobotWritableValueHolder : IRobotValueHolder, IWritableValueHolder
+        private interface IRobotWritableValueHolder : IRobotValueHolder, IWritableValueHolder
         {
-            void PushValue();
         }
 
         public abstract class RobotSignalHolderBase<T> : RobotWritableDataHolderBase<T>, IRobotWritableValueHolder
@@ -20,7 +19,7 @@ namespace Fanuc.RobotInterface
 
             public int Offset { get; }
 
-            public RobotSignalHolderBase(IExRobotIF robot, int index, int offset) :
+            public RobotSignalHolderBase(ExRobotIF robot, int index, int offset) :
                 base(robot)
             {
                 Index = index;
@@ -30,7 +29,7 @@ namespace Fanuc.RobotInterface
 
         private class DigitalInputHolder : RobotSignalHolderBase<bool>
         {
-            public DigitalInputHolder(IExRobotIF robot, int index, int offset) :
+            public DigitalInputHolder(ExRobotIF robot, int index, int offset) :
                 base(robot, index, offset)
             {
             }
@@ -41,7 +40,7 @@ namespace Fanuc.RobotInterface
 
         private class DigitalOutputHolder : RobotSignalHolderBase<bool>
         {
-            public DigitalOutputHolder(IExRobotIF robot, int index, int offset) :
+            public DigitalOutputHolder(ExRobotIF robot, int index, int offset) :
                 base(robot, index, offset)
             {
             }
@@ -52,7 +51,7 @@ namespace Fanuc.RobotInterface
 
         private class GroupedInputHolder : RobotSignalHolderBase<ushort>
         {
-            public GroupedInputHolder(IExRobotIF robot, int index, int offset) :
+            public GroupedInputHolder(ExRobotIF robot, int index, int offset) :
                 base(robot, index, offset)
             {
             }
@@ -63,7 +62,7 @@ namespace Fanuc.RobotInterface
 
         private class GroupedOutputHolder : RobotSignalHolderBase<ushort>
         {
-            public GroupedOutputHolder(IExRobotIF robot, int index, int offset) :
+            public GroupedOutputHolder(ExRobotIF robot, int index, int offset) :
                 base(robot, index, offset)
             {
             }
