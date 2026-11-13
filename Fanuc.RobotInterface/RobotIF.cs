@@ -3,10 +3,8 @@ using System;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace Fanuc.RobotInterface
 {
@@ -21,6 +19,7 @@ namespace Fanuc.RobotInterface
 
         private byte SequenceNumber;
         private string Host;
+        string IRobotIF.Host => Host;
 
         public void Connect(string host, ushort port, int timeout)
         {
@@ -103,55 +102,6 @@ namespace Fanuc.RobotInterface
         }
 
         public void ClearAlarm() => WriteCommand("CLRALM");
-        public void ResetAlarm() => ExecuteKCL("reset");
-
-
-        private const string KclSuccessRegexPattern = @"<BODY.*>.*<XMP.*>\s*(?<XMP>.*)\s*</\s*XMP>.*</\s*BODY>";
-        private const string KclFailRegexPattern = @"<BODY.*>.*ERROR:\s*([^<]*)\s*.*</\s*BODY>";
-
-#if NET7_0_OR_GREATER
-        [GeneratedRegex(KclSuccessRegexPattern)]
-        private static partial Regex GetKclSuccessRegex();
-        [GeneratedRegex(KclFailRegexPattern)]
-        private static partial Regex GetKclFailRegex();
-
-#else
-        private static readonly Lazy<Regex> CachedKclSuccessRegex = new(() => new Regex(KclSuccessRegexPattern, RegexOptions.Compiled));
-        private static readonly Lazy<Regex> CachedKclFailRegex = new(() => new Regex(KclFailRegexPattern, RegexOptions.Compiled));
-
-        private static Regex GetKclSuccessRegex() => CachedKclSuccessRegex.Value;
-        private static Regex GetKclFailRegex() => CachedKclFailRegex.Value;
-#endif
-
-        private HttpClient _HttpClient = new();
-
-        public string ExecuteKCL(string command)
-        {
-            var response = _HttpClient.GetAsync($"http://{Host}/KCL/{command}").Result;
-            response.EnsureSuccessStatusCode();
-
-            var content = response.Content.ReadAsStringAsync().Result;
-            var m = GetKclSuccessRegex().Match(content);
-            if (m.Success)
-            {
-                return m.Groups["XMP"].Value;
-            }
-            else
-            {
-                var mm = GetKclFailRegex().Match(content);
-                if (m.Success)
-                    throw new IOException($"Executing KCL \"{command}\" failed: {mm.Groups[1].Value}");
-            }
-            throw new IOException($"Executing KCL \"{command}\" failed: {content}");
-        }
-
-        public string ExecuteKarel(string program)
-        {
-            var response = _HttpClient.GetAsync($"http://{Host}/KAREL/{program}").Result;
-            response.EnsureSuccessStatusCode();
-
-            return response.Content.ReadAsStringAsync().Result;
-        }
 
         #region IO
         internal bool[] ReadDIO(SegmentSelector selector, int index, ushort count)

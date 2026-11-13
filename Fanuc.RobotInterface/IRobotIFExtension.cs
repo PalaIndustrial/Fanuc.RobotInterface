@@ -1,11 +1,52 @@
 ﻿using System;
 using System.IO;
+using System.Net.Http;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 
 namespace Fanuc.RobotInterface;
 
-public static class IRobotIFExtension
+public static partial class IRobotIFExtension
 {
+    private static readonly HttpClient HttpClient = new();
+    private const string KclSuccessRegexPattern = @"<BODY.*>.*<XMP.*>\s*(?<XMP>.*)\s*</\s*XMP>.*</\s*BODY>";
+    private const string KclFailRegexPattern = @"<BODY.*>.*ERROR:\s*([^<]*)\s*.*</\s*BODY>";
+
+#if NET7_0_OR_GREATER
+    [GeneratedRegex(KclSuccessRegexPattern)]
+    private static partial Regex GetKclSuccessRegex();
+    [GeneratedRegex(KclFailRegexPattern)]
+    private static partial Regex GetKclFailRegex();
+#else
+    private static readonly Lazy<Regex> CachedKclSuccessRegex = new(() => new Regex(KclSuccessRegexPattern, RegexOptions.Compiled));
+    private static readonly Lazy<Regex> CachedKclFailRegex = new(() => new Regex(KclFailRegexPattern, RegexOptions.Compiled));
+    private static Regex GetKclSuccessRegex() => CachedKclSuccessRegex.Value;
+    private static Regex GetKclFailRegex() => CachedKclFailRegex.Value;
+#endif
+
+    public static void ResetAlarm(this IRobotIF robot) => robot.ExecuteKCL("reset");
+
+    public static string ExecuteKCL(this IRobotIF robot, string command)
+    {
+        using var response = HttpClient.GetAsync($"http://{robot.Host}/KCL/{command}").Result;
+        response.EnsureSuccessStatusCode();
+        var content = response.Content.ReadAsStringAsync().Result;
+        var success = GetKclSuccessRegex().Match(content);
+        if (success.Success)
+            return success.Groups["XMP"].Value;
+        var failure = GetKclFailRegex().Match(content);
+        if (failure.Success)
+            throw new IOException($"Executing KCL \"{command}\" failed: {failure.Groups[1].Value}");
+        throw new IOException($"Executing KCL \"{command}\" failed: {content}");
+    }
+
+    public static string ExecuteKarel(this IRobotIF robot, string program)
+    {
+        using var response = HttpClient.GetAsync($"http://{robot.Host}/KAREL/{program}").Result;
+        response.EnsureSuccessStatusCode();
+        return response.Content.ReadAsStringAsync().Result;
+    }
+
     public const int OFFSET_SDIO = 0;
     public const int OFFSET_RDIO = 5000;
     public const int OFFSET_UOP = 6000;
