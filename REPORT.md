@@ -139,6 +139,12 @@ Long-running connection or queued I/O can therefore delay UI response or exit.
 - `RobotDataDictionary.Count` returns `_Items.Count`; dictionary notifications
   are forwarded to consumers.
 - I/O extension methods add operation context to errors where implemented.
+- `RobotIF` loops until a request, response header and declared payload are
+  fully transferred, and reports EOF instead of spinning on a truncated frame
+  (F1/F2). Loopback tests cover fragmentation and early disconnect; a large
+  request reaches a slow peer intact. The send loop was also checked with a
+  temporary 1,024-byte send cap; the committed tests do not deterministically
+  force a partial `Socket.Send` return.
 
 The digital read-modify-write is still not atomic with respect to another
 caller or controller-side changes. These improvements do not establish
@@ -151,8 +157,6 @@ the triggering conditions, not observed production incidents.
 
 | ID | Priority | Finding and consequence | Source |
 |---|---|---|---|
-| F1 | High | A single receive must return the entire 56-byte header. TCP may legally split it, so a valid fragmented response is rejected. A single send also ignores the returned byte count, allowing a partially sent request to be treated as complete. | `RobotIF.cs`: `ReceiveInternal`, `SendInternal` |
-| F2 | High | The payload receive loop does not handle a zero-byte receive. An orderly peer close partway through an extended response leaves the offset unchanged and can spin indefinitely instead of reporting EOF. | `RobotIF.cs`: `ReceiveInternal` |
 | F3 | High | Cleanup depends on `IsConnected`. A client already reporting disconnected is neither disposed nor cleared. Also, the newly created client is assigned to the field only after TCP connect succeeds, so failures before that assignment leave the local client outside the catch block's cleanup path. | `RobotIF.cs`: `Connect`, `Disconnect` |
 | F4 | High | No core lock protects request/response exchanges, sequence numbers, buffers or connection transitions. Direct concurrent calls, a shared backend, or overlapping connection attempts can interleave exchanges or race disposal. Wrapper serialization covers only work using the same task factory. | `RobotIF.cs`; `ExRobotIF.cs`: `ConnectAsync` |
 | F5 | High | Extended shutdown has no watcher termination/join protocol and cannot interrupt queued or active blocking I/O. If the backend already reports disconnected, the entire cleanup body is skipped. A rapid reconnect can let an old watcher observe the new connection and continue alongside the new watcher. | `ExRobotIF.cs`: watcher loop; `ExRobotIF.IRobotInterface.cs`: `Disconnect` |
@@ -187,9 +191,8 @@ the triggering conditions, not observed production incidents.
 
 ## Recommended next work
 
-1. **Transport correctness:** loop until all request/header bytes are transferred,
-   treat zero-byte reads as EOF, and reject malformed or mismatched responses
-   and insufficient payloads.
+1. **Transport correctness:** add deterministic partial-send coverage, and reject
+   malformed or mismatched responses and insufficient payloads.
 2. **Lifecycle ownership:** dispose clients regardless of connection status,
    clean up failed local connects and partial extended initialization, and
    serialize connection state transitions as well as request/response traffic.
@@ -202,9 +205,8 @@ the triggering conditions, not observed production incidents.
    so newer values cannot lose their dirty state.
 5. **Input contracts:** consistently validate address ranges, byte/word alignment
    and payload limits across reads, writes and direct SNPX calls.
-6. **Regression coverage:** use a local TCP server for wrapper failures/reconnects,
-   fragmented headers/payloads, mid-payload EOF,
-   truncated responses and protocol correlation. Cover boundary I/O preservation,
+6. **Regression coverage:** extend local TCP tests for wrapper failures/reconnects,
+   response validation and protocol correlation. Cover boundary I/O preservation,
    assignment reset and concurrent holder updates without a physical robot.
 
 These recommendations concern application lifecycle and protocol correctness;
@@ -219,5 +221,5 @@ they do not replace controller interlocks or other machine-safety mechanisms.
   and desktop application. Baseline tests passed on .NET Framework 4.8, .NET 8
   (using .NET Standard 2.0 assets), .NET 10, and Windows/.NET 10 respectively.
   This is initial coverage, not verification of the findings above.
-- No live robot connection or runtime fault-injection
-  test was performed.
+- Local TCP tests exercise fragmented and truncated responses. No live robot
+  connection or deterministic partial-send fault injection was performed.

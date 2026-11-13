@@ -479,33 +479,53 @@ namespace Fanuc.RobotInterface
         }
         #endregion
 
-        private void SendInternal(IRequestPacket packet) => TcpClient?.Client?.Send(packet.GetBytes());
+        private static void SendInternal(Socket socket, IRequestPacket packet)
+        {
+            var bytes = packet.GetBytes();
+            var offset = 0;
+            while (offset < bytes.Length)
+            {
+                var sent = socket.Send(bytes, offset, bytes.Length - offset, SocketFlags.None);
+                if (sent == 0)
+                    throw new IOException($"Connection closed while sending a request: {offset} of {bytes.Length} bytes sent.");
+                offset += sent;
+            }
+        }
 
         private byte[] HeaderBuffer = new byte[PacketBase.HEADER_LENGTH];
         private byte[] PayloadBuffer = [];
 
-        private byte[] ReceiveInternal()
+        private static void ReceiveExactly(Socket socket, byte[] buffer, int count, string part)
+        {
+            var offset = 0;
+            while (offset < count)
+            {
+                var received = socket.Receive(buffer, offset, count - offset, SocketFlags.None);
+                if (received == 0)
+                    throw new EndOfStreamException($"Connection closed while receiving {part}: {offset} of {count} bytes received.");
+                offset += received;
+            }
+        }
+
+        private byte[] ReceiveInternal(Socket socket)
         {
             // Header
-            var hn = TcpClient.Client.Receive(HeaderBuffer, PacketBase.HEADER_LENGTH, SocketFlags.None);
-            if (hn != PacketBase.HEADER_LENGTH)
-                throw new IOException($"Error receiving header, want {PacketBase.HEADER_LENGTH} bytes, got {hn} only.");
+            ReceiveExactly(socket, HeaderBuffer, PacketBase.HEADER_LENGTH, "header");
 
             // Payload
             var xlen = PacketBase.ExtraLengthFromHeaderBuffer(HeaderBuffer);
             if (PayloadBuffer.Length < xlen)
                 PayloadBuffer = new byte[xlen];
 
-            var offset = 0;
-            while (xlen != offset)
-                offset += TcpClient.Client.Receive(PayloadBuffer, offset, xlen - offset, SocketFlags.None);
+            ReceiveExactly(socket, PayloadBuffer, xlen, "payload");
             return [.. HeaderBuffer, .. PayloadBuffer.Take(xlen)];
         }
 
         private IResponsePacket SendReceiveInternal(IRequestPacket packet)
         {
-            SendInternal(packet);
-            var received = ReceiveInternal();
+            var socket = TcpClient?.Client ?? throw new IOException("Cannot send a request when not connected.");
+            SendInternal(socket, packet);
+            var received = ReceiveInternal(socket);
             return received.Length <= PacketBase.HEADER_LENGTH
                 ? new ShortResponsePacket(received)
                 : new ExtendedResponsePacket(received);

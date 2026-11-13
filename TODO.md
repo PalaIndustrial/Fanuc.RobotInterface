@@ -5,24 +5,21 @@ Updated: 2026-11-13. Based on [REPORT.md](REPORT.md).
 Work from top to bottom: `URGENT` > `HIGH` > `MIDIUM` > `LOW` > `NICETOHAVE`.
 Items within each section are also ordered. Priorities here reflect implementation
 order and impact, not a change to the report's severity assessment or a
-machine-safety classification. All items are open; source findings have not yet
-been reproduced against a robot or simulated controller.
+machine-safety classification. Unchecked items remain open.
 
-Each fix should include focused regression coverage. Establish a local TCP-server
-test harness alongside the first relevant fixes;
-the new library and desktop test projects currently provide baseline coverage,
-not those harnesses. `FANUCRobotTest` remains an interactive application.
+Each fix should include focused regression coverage. The library tests now use
+local TCP servers for framing; additional lifecycle and fault-injection coverage
+is still needed. `FANUCRobotTest` remains an interactive application.
 
 ## URGENT
 
-- [ ] **[URGENT] T01 - Stop infinite receive loops on peer disconnect (F2).**
+- [x] **[URGENT] T01 - Stop infinite receive loops on peer disconnect (F2).**
   In `RobotIF.ReceiveInternal`, treat a zero-byte payload receive as EOF and
   surface the failure. Verify that a disconnect partway through an extended
   response terminates promptly without spinning.
-- [ ] **[URGENT] T02 - Handle partial TCP sends and fragmented headers (F1).**
-  Send the complete request and receive the complete 56-byte header using
-  progress-aware loops. Reject EOF before completion. Cover fragmented headers,
-  truncated headers, and partial-send handling.
+- [x] **[URGENT] T02 - Handle partial TCP sends and fragmented headers (F1).**
+   - [x] **T02.1**: progress-aware send/header loops and EOF handling, with loopback
+         coverage for fragmented/truncated headers and large requests to a slow peer.
 - [ ] **[URGENT] T03 - Make shutdown and reconnect own the watcher lifetime (F5, F13).**
   Stop and await/join the previous watcher before reconnecting, avoid self-join,
   and clean up even when the backend already reports disconnected. Provide a
@@ -109,6 +106,9 @@ not those harnesses. `FANUCRobotTest` remains an interactive application.
 
 These are optional design improvements, not additional confirmed defects.
 
+- [ ] **[NICETOHAVE] T02.2 - Test partial-send retries deterministically.**
+  Prove that a partial `Socket.Send` return is retried; the slow-peer test does
+  not guarantee that condition.
 - [ ] **[NICETOHAVE] T19 - Consider an injectable core transport.**
   If the local TCP harness cannot conveniently exercise partial sends or other
   faults, consider a small transport seam for deterministic fault injection.
