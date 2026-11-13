@@ -21,6 +21,31 @@ A library that allows you to connect to FANUC industrial robot arm. Should work 
 
 Tested with R-30iB.
 
+# Example
+
+Connect to a controller and read digital input 1:
+
+```csharp
+using Fanuc.RobotInterface;
+
+var robot = new RobotIF();
+try
+{
+    robot.Connect("192.168.1.10", 60008, 10000);
+    bool input = robot.ReadDI(1, 1)[0];
+}
+finally
+{
+    robot.Disconnect();
+}
+```
+
+# Automated tests
+
+The solution includes separate MSTest projects for the libraries and the WPF
+application. The desktop project currently requires FANUC COM components and
+Visual Studio MSBuild.
+
 # Disclaimer
 
 **The authohr of this software is not affiliated with GE or FANUC Corporation in any way. All trademarks and registered trademarks are property of their respective owners, and company, product and service names mentioned in this readme or appearing in source code or other artifacts in this repository are used for identification purposes only.**
