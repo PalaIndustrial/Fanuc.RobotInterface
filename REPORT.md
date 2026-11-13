@@ -219,9 +219,9 @@ they do not replace controller interlocks or other machine-safety mechanisms.
 - Findings were checked against the current source and project files.
 - The Visual Studio workspace build succeeded during this review. This does not
   establish runtime behavior or coverage of every target/configuration.
-- The solution contains an interactive test application, not an automated unit
-  test project. Visual Studio test discovery was unavailable in this session;
-  no automated test results are claimed.
+- Since the initial review, separate MSTest projects were added for the libraries
+  and desktop application. Baseline tests passed on .NET Framework 4.8, .NET 8
+  (using .NET Standard 2.0 assets), .NET 10, and Windows/.NET 10 respectively.
+  This is initial coverage, not verification of the findings above.
 - No live robot connection, COM integration test, or runtime fault-injection
   test was performed.
-- This update changes only this report, not application behavior.

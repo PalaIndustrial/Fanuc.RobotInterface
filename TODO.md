@@ -10,7 +10,8 @@ been reproduced against a robot or simulated controller.
 
 Each fix should include focused regression coverage. Establish a fake `IRobotIF`
 backend and a local TCP-server test harness alongside the first relevant fixes;
-the existing `FANUCRobotTest` application is not an automated test suite.
+the new library and desktop test projects currently provide baseline coverage,
+not those harnesses. `FANUCRobotTest` remains an interactive application.
 
 ## URGENT
 
