@@ -11,6 +11,8 @@
 - `FANUCRobotTest`: a desktop application for manual testing and debugging of the main library,
                     less relevant, everything can change in this application with no migration
                     / backward compatibility.
+- `FANUCRobotTest.Tests`: unit test for the desktop application, the purpose is to test the desktop
+                          application itself, not the main library.
 
 ## Documentation
 
