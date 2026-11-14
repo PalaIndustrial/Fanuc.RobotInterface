@@ -15,6 +15,10 @@ The complete frame is read using the declared extra length, regardless of the
 message type. Short packets carry data inside the header; extended packets
 carry data after it.
 
+`ExtraPayload` sets the declared byte length and accepts at most 65,535 bytes.
+An extended request's `Count` is independent of that length: for example, a
+word write may have a count of 2 and a payload length of 4 bytes.
+
 ## Common header (bytes 0-39)
 
  | Offset  | Field
