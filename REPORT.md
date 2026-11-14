@@ -132,8 +132,10 @@ Long-running connection or queued I/O can therefore delay UI response or exit.
 
 - Digital writes preserve neighboring bits using one or two boundary reads
   before a byte-aligned write. They no longer unconditionally zero those bits.
-- Digital and group writes reject address/payload ranges beyond their supported
-  protocol limits.
+- `RobotIF` rejects out-of-range 1-based addresses, unrepresentable read/write
+  ranges, odd SNPX byte counts and oversized command/SNPX payloads (F9/F10).
+- Offset-based signal methods and holders also validate the caller's 1-based
+  index before applying their offset.
 - String register and string system-variable holders pad odd byte counts before
   SNPX writes.
 - `RobotDataDictionary.Count` returns `_Items.Count`; dictionary notifications
@@ -159,14 +161,12 @@ the triggering conditions, not observed production incidents.
 | ID | Priority | Finding and consequence | Source |
 |---|---|---|---|
 | F5 | High | Socket I/O can be interrupted and watcher overlap is prevented, but shutdown has no universal bound while TCP connect, an HTTP operation or a consumer callback remains blocked. | `ExRobotIF.cs`: `FinishStop`; `RobotIF.cs`: `Connect` |
-| F9 | Medium | Read-side range checks are weaker than write-side checks. For example, `ReadGI(65537, 1)` decrements the index and casts it to `ushort`, targeting offset zero instead of rejecting it. `WriteSNPX(0, ...)` also passes validation and casts the decremented index to 65535. | `RobotIF.cs`: `ReadGIO`, `ReadDIO`, `ReadSNPX`, `WriteSNPX` |
-| F10 | Medium | SNPX converts byte counts to word counts by integer division without rejecting odd counts. Oversized command/SNPX payload lengths and indexes are narrowed to `ushort` without complete validation. Holder-level string padding does not protect direct callers. | `RobotIF.cs`: `WriteCommand`, `WriteSNPX`, `ReadSNPX`; `Fanuc.SRTP\PacketBase.cs`: `ExtraPayload` |
 | F11 | Medium | Reads validate ACK format and minimum payload length, but fixed six-byte short payloads can contain indistinguishable padding. Handshake and write ACK types are not validated, and response identity and other fields are not correlated with requests; their semantics require investigation. | `RobotIF.cs`: handshake and read/write methods |
 | F13 | Medium | The background watcher now has a fixed 10 ms inter-pass wait, but idle CPU and active refresh cadence have not been separately measured or made configurable. | `ExRobotIF.cs`: `Watch` |
 
-F3, F4, F6, F7 and F8 were addressed by the lifecycle changes. F12's dirty
-state was removed in favor of explicit per-write tasks; a loopback test covers
-consecutive writes and their acknowledgments.
+F3, F4, F6, F7 and F8 were addressed by the lifecycle changes. F9 and F10 were
+addressed by input validation. F12's dirty state was removed in favor of explicit
+per-write tasks; a loopback test covers consecutive writes and their responses.
 
 `RobotIF.Refresh` and `Refresh2` additionally remain public methods that throw
 `NotImplementedException`; neither is part of `IRobotIF`.
@@ -195,9 +195,7 @@ consecutive writes and their acknowledgments.
    interrupt the underlying operation, not merely stop waiting for its task.
 3. **Polling:** verify idle and active polling cadence and consider a
    configurable interval.
-4. **Input contracts:** consistently validate address ranges, byte/word alignment
-   and payload limits across reads, writes and direct SNPX calls.
-5. **Regression coverage:** extend local TCP tests for response validation and
+4. **Regression coverage:** extend local TCP tests for response validation and
    protocol correlation, and verify behavior against a controller when available.
 
 These recommendations concern application lifecycle and protocol correctness;
@@ -206,7 +204,7 @@ they do not replace controller interlocks or other machine-safety mechanisms.
 ## Validation status
 
 - The Visual Studio workspace build succeeded. The last full library test run
-  passed 208 tests across .NET Framework 4.8, .NET 8 (using .NET Standard 2.0
+  passed 229 tests across .NET Framework 4.8, .NET 8 (using .NET Standard 2.0
   assets) and .NET 10. The last desktop test run passed 15 Windows/.NET 10 tests.
   A combined Test Explorer run reported a test-storage error after reporting
   154 passes, so the projects were verified separately.
@@ -216,3 +214,5 @@ they do not replace controller interlocks or other machine-safety mechanisms.
   performed.
 - Read ACK validation, length checks and extended-payload tracing were exercised
   by targeted transport tests on .NET Framework 4.8, .NET 8 and .NET 10.
+- Loopback tests cover input validation and maximum representable read/write
+  boundaries without sending invalid requests.

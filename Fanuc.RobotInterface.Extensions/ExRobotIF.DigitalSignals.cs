@@ -1,4 +1,5 @@
 using Fanuc.RobotInterface.Collections;
+using System;
 
 namespace Fanuc.RobotInterface
 {
@@ -22,6 +23,8 @@ namespace Fanuc.RobotInterface
             public RobotSignalHolderBase(ExRobotIF robot, int index, int offset) :
                 base(robot)
             {
+                if (index < 1 || (long)index + offset < 1 || (long)index + offset > (long)ushort.MaxValue + 1)
+                    throw new ArgumentOutOfRangeException(nameof(index), "The index exceeds the addressable range.");
                 Index = index;
                 Offset = offset;
             }

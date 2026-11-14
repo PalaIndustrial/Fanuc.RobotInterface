@@ -374,6 +374,235 @@ public sealed class RobotIFTransportTests
     }
 
     [TestMethod]
+    public void InvalidRangesAndPayloadsAreRejectedBeforeSending()
+    {
+        using var server = new TestServer(socket =>
+        {
+            Handshake(socket);
+            var request = ReadRequest(socket);
+            Assert.AreEqual((byte)2, request[2]);
+            Assert.AreEqual((byte)ServiceRequestCode.WRITE_SYS_MEM, request[42]);
+            Assert.AreEqual((byte)'O', request[48]);
+            Assert.AreEqual((byte)'K', request[49]);
+            SendAll(socket, ResponseHeader());
+        });
+        var robot = new RobotIF();
+        try
+        {
+            robot.Connect("127.0.0.1", server.Port, 3000);
+            Action[] invalid =
+            [
+                () => robot.ReadDI(0, 1),
+                () => robot.ReadDI(65537, 1),
+                () => robot.ReadDI(int.MaxValue, 1),
+                () => robot.ReadDI(65536, 2),
+                () => robot.ReadDI(1, 65535),
+                () => robot.ReadDO(65537, 1),
+                () => robot.ReadGI(0, 1),
+                () => robot.ReadGI(65537, 1),
+                () => robot.ReadGI(65536, 2),
+                () => robot.ReadGI(1, 32768),
+                () => robot.ReadGO(65537, 1),
+                () => robot.ReadSNPX(0, 2),
+                () => robot.ReadSNPX(0, 0),
+                () => robot.ReadSNPX(65537, 2),
+                () => robot.ReadSNPX(65537, 0),
+                () => robot.ReadSNPX(65536, 4),
+                () => robot.ReadSNPX(1, 1),
+                () => robot.ReadSNPX(1, 65535),
+                () => robot.WriteDI(65536, true, true),
+                () => robot.WriteDO(65537, true),
+                () => robot.WriteGI(65536, 1, 2),
+                () => robot.WriteGO(1, new ushort[32768]),
+                () => robot.WriteSNPX(0, 1, 2),
+                () => robot.WriteSNPX(0),
+                () => robot.WriteSNPX(65537, 1, 2),
+                () => robot.WriteSNPX(65537),
+                () => robot.WriteSNPX(65536, 1, 2, 3, 4),
+                () => robot.WriteSNPX(1, 1),
+                () => robot.WriteSNPX(1, new byte[65535]),
+                () => robot.WriteSNPX(1, new byte[65536]),
+                () => robot.WriteCommand(new string('A', 65536)),
+                () => robot.ReadUI(0, 1),
+                () => robot.ReadUI(-5999, 1),
+                () => robot.ReadRDO(int.MaxValue, 1),
+                () => robot.ReadAI(0, 1),
+                () => robot.ReadPmcD(55537, 1),
+                () => robot.WriteUI(0, true),
+                () => robot.WritePmcK(55537, true),
+                () => robot.WriteAO(0, 1),
+                () => robot.WriteAI(64537, 1)
+            ];
+            foreach (var operation in invalid)
+                Assert.ThrowsExactly<ArgumentOutOfRangeException>(operation);
+
+            var offsetRangeError = Assert.ThrowsExactly<IOException>(() => robot.ReadUI(59536, 2));
+            Assert.IsInstanceOfType<ArgumentOutOfRangeException>(offsetRangeError.InnerException);
+
+            Assert.AreEqual(0, robot.ReadDI(65536, 0).Length);
+            Assert.AreEqual(0, robot.ReadGI(65536, 0).Length);
+            Assert.AreEqual(0, robot.ReadSNPX(65536, 0).Length);
+            robot.WriteDI(65536);
+            robot.WriteGI(65536);
+            robot.WriteSNPX(65536);
+            robot.WriteCommand("OK");
+            server.Complete();
+        }
+        finally
+        {
+            robot.Disconnect();
+        }
+    }
+
+    [TestMethod]
+    public void BoundaryReadsPreserveOneBasedAddressesAndCounts()
+    {
+        using var server = new TestServer(socket =>
+        {
+            Handshake(socket);
+
+            var digital = ReadRequest(socket);
+            Assert.AreEqual((byte)0xf8, digital[44]);
+            Assert.AreEqual((byte)0xff, digital[45]);
+            Assert.AreEqual((byte)8, digital[46]);
+            var digitalResponse = ResponseHeader();
+            digitalResponse[44] = 0x80;
+            SendAll(socket, digitalResponse);
+
+            var group = ReadRequest(socket);
+            Assert.AreEqual((byte)0xff, group[44]);
+            Assert.AreEqual((byte)0xff, group[45]);
+            Assert.AreEqual((byte)1, group[46]);
+            var groupResponse = ResponseHeader();
+            groupResponse[44] = 0x34;
+            groupResponse[45] = 0x12;
+            SendAll(socket, groupResponse);
+
+            var snpx = ReadRequest(socket);
+            Assert.AreEqual((byte)0xff, snpx[44]);
+            Assert.AreEqual((byte)0xff, snpx[45]);
+            Assert.AreEqual((byte)1, snpx[46]);
+            var snpxResponse = ResponseHeader();
+            snpxResponse[44] = 0x56;
+            snpxResponse[45] = 0x78;
+            SendAll(socket, snpxResponse);
+
+            var ui = ReadRequest(socket);
+            Assert.AreEqual((byte)0x70, ui[44]);
+            Assert.AreEqual((byte)0x17, ui[45]);
+            var uiResponse = ResponseHeader();
+            uiResponse[44] = 1;
+            SendAll(socket, uiResponse);
+
+            var lastUi = ReadRequest(socket);
+            Assert.AreEqual((byte)0xf8, lastUi[44]);
+            Assert.AreEqual((byte)0xff, lastUi[45]);
+            var lastUiResponse = ResponseHeader();
+            lastUiResponse[44] = 0x80;
+            SendAll(socket, lastUiResponse);
+
+            var largeGroup = ReadRequest(socket);
+            Assert.AreEqual((byte)0xff, largeGroup[46]);
+            Assert.AreEqual((byte)0x7f, largeGroup[47]);
+            SendAll(socket, ResponseHeader(65534));
+            SendAll(socket, new byte[65534]);
+
+            var largeSnpx = ReadRequest(socket);
+            Assert.AreEqual((byte)0x01, largeSnpx[44]);
+            Assert.AreEqual((byte)0x80, largeSnpx[45]);
+            Assert.AreEqual((byte)0xff, largeSnpx[46]);
+            Assert.AreEqual((byte)0x7f, largeSnpx[47]);
+            SendAll(socket, ResponseHeader(65534));
+            SendAll(socket, new byte[65534]);
+        });
+        var robot = new RobotIF();
+        try
+        {
+            robot.Connect("127.0.0.1", server.Port, 3000);
+            CollectionAssert.AreEqual(new[] { true }, robot.ReadDI(65536, 1));
+            CollectionAssert.AreEqual(new ushort[] { 0x1234 }, robot.ReadGI(65536, 1));
+            CollectionAssert.AreEqual(new byte[] { 0x56, 0x78 }, robot.ReadSNPX(65536, 2));
+            CollectionAssert.AreEqual(new[] { true }, robot.ReadUI(1, 1));
+            CollectionAssert.AreEqual(new[] { true }, robot.ReadUI(59536, 1));
+            Assert.AreEqual(32767, robot.ReadGI(1, 32767).Length);
+            Assert.AreEqual(65534, robot.ReadSNPX(32770, 65534).Length);
+            server.Complete();
+        }
+        finally
+        {
+            robot.Disconnect();
+        }
+    }
+
+    [TestMethod]
+    public void BoundaryWritesPreserveAddressesAndMaximumPayloads()
+    {
+        using var server = new TestServer(socket =>
+        {
+            Handshake(socket);
+
+            var shortSnpx = ReadRequest(socket);
+            Assert.AreEqual((byte)0xff, shortSnpx[44]);
+            Assert.AreEqual((byte)0xff, shortSnpx[45]);
+            Assert.AreEqual((byte)1, shortSnpx[46]);
+            CollectionAssert.AreEqual(new byte[] { 1, 2 }, shortSnpx.Skip(48).Take(2).ToArray());
+            SendAll(socket, ResponseHeader());
+
+            var largeSnpx = ReadRequest(socket);
+            Assert.AreEqual(65534, PacketBase.ExtraLengthFromHeaderBuffer(largeSnpx));
+            Assert.AreEqual((byte)0x01, largeSnpx[52]);
+            Assert.AreEqual((byte)0x80, largeSnpx[53]);
+            Assert.AreEqual((byte)0xff, largeSnpx[54]);
+            Assert.AreEqual((byte)0x7f, largeSnpx[55]);
+            SendAll(socket, ResponseHeader());
+
+            var largeGroup = ReadRequest(socket);
+            Assert.AreEqual(65534, PacketBase.ExtraLengthFromHeaderBuffer(largeGroup));
+            Assert.AreEqual((byte)0x01, largeGroup[52]);
+            Assert.AreEqual((byte)0x80, largeGroup[53]);
+            Assert.AreEqual((byte)0xff, largeGroup[54]);
+            Assert.AreEqual((byte)0x7f, largeGroup[55]);
+            SendAll(socket, ResponseHeader());
+
+            var digitalRead = ReadRequest(socket);
+            Assert.AreEqual((byte)0xf8, digitalRead[44]);
+            Assert.AreEqual((byte)0xff, digitalRead[45]);
+            var digitalResponse = ResponseHeader();
+            digitalResponse[44] = 0x55;
+            SendAll(socket, digitalResponse);
+
+            var digitalWrite = ReadRequest(socket);
+            Assert.AreEqual((byte)0xf8, digitalWrite[44]);
+            Assert.AreEqual((byte)0xff, digitalWrite[45]);
+            Assert.AreEqual((byte)8, digitalWrite[46]);
+            Assert.AreEqual((byte)0xd5, digitalWrite[48]);
+            SendAll(socket, ResponseHeader());
+
+            var command = ReadRequest(socket);
+            Assert.AreEqual(65535, PacketBase.ExtraLengthFromHeaderBuffer(command));
+            Assert.AreEqual((byte)0xff, command[54]);
+            Assert.AreEqual((byte)0xff, command[55]);
+            Assert.IsTrue(command.Skip(PacketBase.HEADER_LENGTH).All(b => b == (byte)'A'));
+            SendAll(socket, ResponseHeader());
+        });
+        var robot = new RobotIF();
+        try
+        {
+            robot.Connect("127.0.0.1", server.Port, 3000);
+            robot.WriteSNPX(65536, 1, 2);
+            robot.WriteSNPX(32770, new byte[65534]);
+            robot.WriteGI(32770, new ushort[32767]);
+            robot.WriteDO(65536, true);
+            robot.WriteCommand(new string('A', 65535));
+            server.Complete();
+        }
+        finally
+        {
+            robot.Disconnect();
+        }
+    }
+
+    [TestMethod]
     public void RequestWithoutConnectionFailsClearly()
     {
         var robot = new RobotIF();

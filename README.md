@@ -85,6 +85,11 @@ effect of that command on other controller clients has not been verified. Give
 the wrapper a dedicated `RobotIF`; direct use of the same backend bypasses its
 assignment and lifecycle management.
 
+`RobotIF` uses 1-based indexes. Invalid addresses and ranges, odd SNPX byte
+counts, and payloads that exceed the protocol limits are rejected before sending.
+Offset-based signal methods and holders also require 1-based indexes. SNPX indexes
+address words, while SNPX counts and payload sizes are in bytes.
+
 Reads require `SHORT_ACK` for inline data or `LONG_ACK` for extended data and
 reject other response types or insufficient payload bytes. The entire declared
 frame is received before validation. A zero-length `LONG_ACK` has no read data.

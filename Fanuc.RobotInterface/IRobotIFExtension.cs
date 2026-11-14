@@ -60,6 +60,13 @@ public static partial class IRobotIFExtension
     public const int OFFSET_AIO = 1000;
     public const int OFFSET_PMC_D = 10000;
 
+    private static int OffsetIndex(int index, int offset)
+    {
+        if (index < 1 || (long)index + offset > (long)ushort.MaxValue + 1)
+            throw new ArgumentOutOfRangeException(nameof(index), "The index exceeds the addressable range.");
+        return index + offset;
+    }
+
     #region Read
     private static bool[] GuardedReadDI(this IRobotIF robot, int index, ushort count, [CallerMemberName] string caller = nameof(IRobotIF.ReadDI))
     {
@@ -84,19 +91,19 @@ public static partial class IRobotIFExtension
         }
     }
 
-    public static bool[] ReadSDI(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDI(index + OFFSET_SDIO, count);
-    public static bool[] ReadSDO(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDO(index + OFFSET_SDIO, count);
-    public static bool[] ReadRDI(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDI(index + OFFSET_RDIO, count);
-    public static bool[] ReadRDO(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDO(index + OFFSET_RDIO, count);
-    public static bool[] ReadUI(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDI(index + OFFSET_UOP, count);
-    public static bool[] ReadUO(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDO(index + OFFSET_UOP, count);
-    public static bool[] ReadSI(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDI(index + OFFSET_SOP, count);
-    public static bool[] ReadSO(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDO(index + OFFSET_SOP, count);
-    public static bool[] ReadWI(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDI(index + OFFSET_WIO, count);
-    public static bool[] ReadWSI(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDI(index + OFFSET_WSI, count);
-    public static bool[] ReadWO(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDO(index + OFFSET_WIO, count);
-    public static bool[] ReadPmcK(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDO(index + OFFSET_PMC_K, count);
-    public static bool[] ReadPmcR(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDO(index + OFFSET_PMC_R, count);
+    public static bool[] ReadSDI(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDI(OffsetIndex(index, OFFSET_SDIO), count);
+    public static bool[] ReadSDO(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDO(OffsetIndex(index, OFFSET_SDIO), count);
+    public static bool[] ReadRDI(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDI(OffsetIndex(index, OFFSET_RDIO), count);
+    public static bool[] ReadRDO(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDO(OffsetIndex(index, OFFSET_RDIO), count);
+    public static bool[] ReadUI(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDI(OffsetIndex(index, OFFSET_UOP), count);
+    public static bool[] ReadUO(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDO(OffsetIndex(index, OFFSET_UOP), count);
+    public static bool[] ReadSI(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDI(OffsetIndex(index, OFFSET_SOP), count);
+    public static bool[] ReadSO(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDO(OffsetIndex(index, OFFSET_SOP), count);
+    public static bool[] ReadWI(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDI(OffsetIndex(index, OFFSET_WIO), count);
+    public static bool[] ReadWSI(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDI(OffsetIndex(index, OFFSET_WSI), count);
+    public static bool[] ReadWO(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDO(OffsetIndex(index, OFFSET_WIO), count);
+    public static bool[] ReadPmcK(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDO(OffsetIndex(index, OFFSET_PMC_K), count);
+    public static bool[] ReadPmcR(this IRobotIF robot, int index, ushort count) => robot.GuardedReadDO(OffsetIndex(index, OFFSET_PMC_R), count);
 
     private static ushort[] GuardedReadGI(this IRobotIF robot, int index, ushort count, [CallerMemberName] string caller = nameof(IRobotIF.ReadGI))
     {
@@ -121,11 +128,11 @@ public static partial class IRobotIFExtension
         }
     }
 
-    public static ushort[] ReadGI(this IRobotIF robot, int index, ushort count) => robot.GuardedReadGI(index + OFFSET_GIO, count);
-    public static ushort[] ReadGO(this IRobotIF robot, int index, ushort count) => robot.GuardedReadGO(index + OFFSET_GIO, count);
-    public static ushort[] ReadAI(this IRobotIF robot, int index, ushort count) => robot.GuardedReadGI(index + OFFSET_AIO, count);
-    public static ushort[] ReadAO(this IRobotIF robot, int index, ushort count) => robot.GuardedReadGO(index + OFFSET_AIO, count);
-    public static ushort[] ReadPmcD(this IRobotIF robot, int index, ushort count) => robot.GuardedReadGO(index + OFFSET_PMC_D, count);
+    public static ushort[] ReadGI(this IRobotIF robot, int index, ushort count) => robot.GuardedReadGI(OffsetIndex(index, OFFSET_GIO), count);
+    public static ushort[] ReadGO(this IRobotIF robot, int index, ushort count) => robot.GuardedReadGO(OffsetIndex(index, OFFSET_GIO), count);
+    public static ushort[] ReadAI(this IRobotIF robot, int index, ushort count) => robot.GuardedReadGI(OffsetIndex(index, OFFSET_AIO), count);
+    public static ushort[] ReadAO(this IRobotIF robot, int index, ushort count) => robot.GuardedReadGO(OffsetIndex(index, OFFSET_AIO), count);
+    public static ushort[] ReadPmcD(this IRobotIF robot, int index, ushort count) => robot.GuardedReadGO(OffsetIndex(index, OFFSET_PMC_D), count);
     #endregion
 
     #region Write
@@ -152,21 +159,21 @@ public static partial class IRobotIFExtension
         }
     }
 
-    public static void WriteSDI(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDI(index + OFFSET_SDIO, values);
-    public static void WriteSDO(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDO(index + OFFSET_SDIO, values);
-    public static void WriteRDI(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDI(index + OFFSET_RDIO, values);
-    public static void WriteRDO(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDO(index + OFFSET_RDIO, values);
-    public static void WriteUI(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDI(index + OFFSET_UOP, values);
-    public static void WriteUO(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDO(index + OFFSET_UOP, values);
-    public static void WriteSI(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDI(index + OFFSET_SOP, values);
-    public static void WriteSO(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDO(index + OFFSET_SOP, values);
-    public static void WriteWI(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDI(index + OFFSET_WIO, values);
-    public static void WriteWSI(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDI(index + OFFSET_WSI, values);
-    public static void WriteWO(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDO(index + OFFSET_WIO, values);
-    public static void WritePmcK(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDO(index + OFFSET_PMC_K, values);
-    public static void WritePmcR(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDO(index + OFFSET_PMC_R, values);
+    public static void WriteSDI(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDI(OffsetIndex(index, OFFSET_SDIO), values);
+    public static void WriteSDO(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDO(OffsetIndex(index, OFFSET_SDIO), values);
+    public static void WriteRDI(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDI(OffsetIndex(index, OFFSET_RDIO), values);
+    public static void WriteRDO(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDO(OffsetIndex(index, OFFSET_RDIO), values);
+    public static void WriteUI(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDI(OffsetIndex(index, OFFSET_UOP), values);
+    public static void WriteUO(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDO(OffsetIndex(index, OFFSET_UOP), values);
+    public static void WriteSI(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDI(OffsetIndex(index, OFFSET_SOP), values);
+    public static void WriteSO(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDO(OffsetIndex(index, OFFSET_SOP), values);
+    public static void WriteWI(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDI(OffsetIndex(index, OFFSET_WIO), values);
+    public static void WriteWSI(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDI(OffsetIndex(index, OFFSET_WSI), values);
+    public static void WriteWO(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDO(OffsetIndex(index, OFFSET_WIO), values);
+    public static void WritePmcK(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDO(OffsetIndex(index, OFFSET_PMC_K), values);
+    public static void WritePmcR(this IRobotIF robot, int index, params bool[] values) => robot.GuardedWriteDO(OffsetIndex(index, OFFSET_PMC_R), values);
 
-    private static void GuardedWriteGI(this IRobotIF robot, int index, ushort count, ushort[] values, [CallerMemberName] string caller = nameof(IRobotIF.WriteGI))
+    private static void GuardedWriteGI(this IRobotIF robot, int index, ushort[] values, [CallerMemberName] string caller = nameof(IRobotIF.WriteGI))
     {
         try
         {
@@ -174,10 +181,10 @@ public static partial class IRobotIFExtension
         }
         catch (Exception ex)
         {
-            throw new IOException($"{caller}(index: {index}, count: {count}) failed", ex);
+            throw new IOException($"{caller}(index: {index}, count: {values.Length}) failed", ex);
         }
     }
-    private static void GuardedWriteGO(this IRobotIF robot, int index, ushort count, ushort[] values, [CallerMemberName] string caller = nameof(IRobotIF.WriteGO))
+    private static void GuardedWriteGO(this IRobotIF robot, int index, ushort[] values, [CallerMemberName] string caller = nameof(IRobotIF.WriteGO))
     {
         try
         {
@@ -185,14 +192,14 @@ public static partial class IRobotIFExtension
         }
         catch (Exception ex)
         {
-            throw new IOException($"{caller}(index: {index}, count: {count}) failed", ex);
+            throw new IOException($"{caller}(index: {index}, count: {values.Length}) failed", ex);
         }
     }
 
-    public static void WriteGI(this IRobotIF robot, int index, params ushort[] values) => robot.GuardedWriteGI(index + OFFSET_GIO, (ushort)values.Length, values);
-    public static void WriteGO(this IRobotIF robot, int index, params ushort[] values) => robot.GuardedWriteGO(index + OFFSET_GIO, (ushort)values.Length, values);
-    public static void WriteAI(this IRobotIF robot, int index, params ushort[] values) => robot.GuardedWriteGI(index + OFFSET_AIO, (ushort)values.Length, values);
-    public static void WriteAO(this IRobotIF robot, int index, params ushort[] values) => robot.GuardedWriteGO(index + OFFSET_AIO, (ushort)values.Length, values);
-    public static void WritePmcD(this IRobotIF robot, int index, params ushort[] values) => robot.GuardedWriteGO(index + OFFSET_PMC_D, (ushort)values.Length, values);
+    public static void WriteGI(this IRobotIF robot, int index, params ushort[] values) => robot.GuardedWriteGI(OffsetIndex(index, OFFSET_GIO), values);
+    public static void WriteGO(this IRobotIF robot, int index, params ushort[] values) => robot.GuardedWriteGO(OffsetIndex(index, OFFSET_GIO), values);
+    public static void WriteAI(this IRobotIF robot, int index, params ushort[] values) => robot.GuardedWriteGI(OffsetIndex(index, OFFSET_AIO), values);
+    public static void WriteAO(this IRobotIF robot, int index, params ushort[] values) => robot.GuardedWriteGO(OffsetIndex(index, OFFSET_AIO), values);
+    public static void WritePmcD(this IRobotIF robot, int index, params ushort[] values) => robot.GuardedWriteGO(OffsetIndex(index, OFFSET_PMC_D), values);
     #endregion
 }

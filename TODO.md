@@ -1,6 +1,6 @@
 # TODO
 
-Updated: 2026-11-13. Based on [REPORT.md](REPORT.md).
+Updated: 2026-11-14. Based on [REPORT.md](REPORT.md).
 
 Work from top to bottom: `URGENT` > `HIGH` > `MIDIUM` > `LOW` > `NICETOHAVE`.
 Items within each section are also ordered. Priorities here reflect implementation
@@ -51,11 +51,11 @@ is still needed. `FANUCRobotTest` remains an interactive application.
    - [ ] **T07.2**: investigate request/response field relationships using
      controller captures before enforcing identity checks for handshake, reads
      and writes. Do not assume undocumented fields are echoed.
-- [ ] **[HIGH] T08 - Reject invalid addresses, counts and payload sizes (F9, F10).**
-  Validate read ranges, SNPX indexes, byte/word alignment and command/SNPX payload
-  limits before narrowing to `ushort` or sending anything. Cover index zero,
-  index 65537, odd SNPX byte counts, maximum valid ranges and overflowing ranges.
-  Preserve existing digital/group write checks and neighboring-bit preservation.
+- [x] **[HIGH] T08 - Reject invalid addresses, counts and payload sizes (F9, F10).**
+  Validate 1-based read/write ranges (including offset signals and holders),
+  SNPX byte/word alignment, and command and payload limits before sending.
+  Loopback tests cover invalid and maximum valid values without changing
+  digital/group neighboring-bit behavior.
 - [x] **[HIGH] T09 - Verify distinct queued holder writes (F12).**
   Holder writes now use explicit `WriteAsync` calls rather than shared dirty
   state. A loopback regression verifies that consecutive writes queued behind a

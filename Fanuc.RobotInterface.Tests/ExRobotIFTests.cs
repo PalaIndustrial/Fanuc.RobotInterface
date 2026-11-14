@@ -9,6 +9,23 @@ namespace Fanuc.RobotInterface.Tests;
 public sealed class ExRobotIFTests
 {
     [TestMethod]
+    public void SignalHoldersRejectIndexesOutsideTheirOffsetRange()
+    {
+        var robot = new ExRobotIF(new RobotIF());
+
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = robot.UI[0]);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = robot.UI[-5999]);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = robot.UI[59537]);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = robot.PMC_R[int.MaxValue]);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = robot.AI[0]);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = robot.AO[64537]);
+        Assert.AreEqual(0, robot.UI.Count);
+        Assert.AreEqual(1, robot.UI[1].Index);
+        Assert.AreEqual(59536, robot.UI[59536].Index);
+        Assert.AreEqual(64536, robot.AI[64536].Index);
+    }
+
+    [TestMethod]
     public async Task DisconnectedOperationsReportTheirCaller()
     {
         var robot = new ExRobotIF(new RobotIF());

@@ -220,14 +220,26 @@ namespace Fanuc.RobotInterface
 
         public void ClearAlarm() => WriteCommand("CLRALM");
 
+        private static void ValidateIndex(int index)
+        {
+            if (index < 1 || index > (int)ushort.MaxValue + 1)
+                throw new ArgumentOutOfRangeException(nameof(index), "index must be between 1 and 65536.");
+        }
+
+        private static void ValidateIndexAndRange(int index, int count, string countParameter)
+        {
+            ValidateIndex(index);
+            if ((long)index - 1 + count > (long)ushort.MaxValue + 1)
+                throw new ArgumentOutOfRangeException(countParameter, "The range exceeds the addressable limit.");
+        }
+
         #region IO
         internal bool[] ReadDIO(SegmentSelector selector, int index, ushort count)
             => RunOperation(() => ReadDIOCore(selector, index, count));
 
         private bool[] ReadDIOCore(SegmentSelector selector, int index, ushort count)
         {
-            if (index < 1)
-                throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
+            ValidateIndexAndRange(index, count, nameof(count));
             if (count < 1)
                 return [];
 
@@ -276,10 +288,11 @@ namespace Fanuc.RobotInterface
 
         private ushort[] ReadGIOCore(SegmentSelector selector, int index, ushort count)
         {
-            if (index < 1)
-                throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
+            ValidateIndexAndRange(index, count, nameof(count));
             if (count < 1)
                 return [];
+            if (count > ushort.MaxValue / 2)
+                throw new ArgumentOutOfRangeException(nameof(count), "The response exceeds the maximum payload size.");
 
             --index;
             var rr = SendReceiveInternal(new ShortRequestPacket()
@@ -312,8 +325,7 @@ namespace Fanuc.RobotInterface
 
         private void WriteDIOCore(SegmentSelector selector, int index, bool[] values)
         {
-            if (index < 1)
-                throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
+            ValidateIndex(index);
 
             var count = values.Length;
             if (count < 1)
@@ -408,8 +420,7 @@ namespace Fanuc.RobotInterface
 
         private void WriteGIOCore(SegmentSelector selector, int index, ushort[] values)
         {
-            if (index < 1)
-                throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
+            ValidateIndex(index);
 
             var count = values.Length;
             if (count < 1)
@@ -474,6 +485,9 @@ namespace Fanuc.RobotInterface
             if (string.IsNullOrEmpty(command))
                 throw new IOException("Cannot send empty command.");
 
+            if (Encoding.ASCII.GetByteCount(command) > ushort.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(command), "The command exceeds the maximum payload size.");
+
             var bytes = Encoding.ASCII.GetBytes(command);
             var rr = SendReceiveInternal((bytes.Length <= 6)
                 ? new ShortRequestPacket()
@@ -522,11 +536,12 @@ namespace Fanuc.RobotInterface
         private void WriteSNPXCore(int index, byte[] values)
         {
             var count = values.Length;
+            ValidateIndexAndRange(index, count / 2, nameof(values));
             if (count == 0)
                 return; // nothing to write
 
-            if (index < 0)
-                throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
+            if (count > ushort.MaxValue || count % 2 != 0)
+                throw new ArgumentOutOfRangeException(nameof(values), "The payload must contain an even number of bytes within the maximum payload size.");
             --index;
 
             var rr = SendReceiveInternal((values.Length <= 6)
@@ -575,10 +590,11 @@ namespace Fanuc.RobotInterface
 
         private byte[] ReadSNPXCore(int index, ushort count)
         {
-            if (index < 1)
-                throw new ArgumentOutOfRangeException(nameof(index), "index must be >= 1");
+            ValidateIndexAndRange(index, count / 2, nameof(count));
             if (count < 1)
                 return [];
+            if (count % 2 != 0)
+                throw new ArgumentOutOfRangeException(nameof(count), "The payload length must be an even number of bytes.");
 
             --index;
 
