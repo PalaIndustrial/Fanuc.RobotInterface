@@ -24,6 +24,12 @@ Tested with R-30iB.
 Intended for direct or local network connections. Behavior across complex
 routed networks has not been tested.
 
+## Other options on controller
+
+In order to upload the helper programs in `FANUCRobotTest\kl` onto a robot controller, the following options are required:
+
+- R507 - Ascii Upload
+
 # Example
 
 Connect to a controller and read digital input 1:
