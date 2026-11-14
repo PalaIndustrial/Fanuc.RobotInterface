@@ -172,8 +172,8 @@ F3, F4, F6, F7 and F8 were addressed by the lifecycle changes. F9 and F10 were
 addressed by input validation. F12's dirty state was removed in favor of explicit
 per-write tasks; a loopback test covers consecutive writes and their responses.
 
-`RobotIF.Refresh` and `Refresh2` additionally remain public methods that throw
-`NotImplementedException`; neither is part of `IRobotIF`.
+The experimental `RobotIF.Refresh` and `Refresh2` placeholders were removed.
+`ExRobotIF` refreshes holder values using its polling loop instead.
 
 ## Corrections to the previous report
 

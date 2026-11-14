@@ -87,10 +87,6 @@ is still needed. `FANUCRobotTest` remains an interactive application.
   Update `FANUCRobotTest\UI\MainWindow.xaml.cs` to await lifecycle operations,
   prevent conflicting button actions, and display failures without freezing the
   UI. Coordinate window-close behavior with T03 and T10.
-- [ ] **[LOW] T16 - Resolve the public `Refresh` and `Refresh2` placeholders.**
-  Decide whether to implement, deprecate, or document these unsupported methods;
-  both currently throw `NotImplementedException` and are outside `IRobotIF`.
-  Consider source/binary compatibility before removing either member.
 - [ ] **[LOW] T17 - Make signing configuration portable.**
   Replace reliance on a machine-specific key path with configurable signing
   inputs and documented local-build steps. Preserve release assembly identity;
@@ -120,6 +116,12 @@ These are optional design improvements, not additional confirmed defects.
   truly asynchronous transport/HTTP operations, and an explicit disposal
   contract. Retain compatibility where feasible; these refactors are not
   prerequisites for correcting the existing implementation.
+
+## WONTFIX
+
+- [x] **[WONTFIX] T16 - Implement `Refresh` and `Refresh2`.**
+  These experimental vendor-library placeholders were removed. `ExRobotIF`
+  uses its polling loop to refresh holder values instead.
 
 ## Finding coverage
 
