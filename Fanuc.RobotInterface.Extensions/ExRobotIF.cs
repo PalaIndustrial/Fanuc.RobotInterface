@@ -66,9 +66,23 @@ namespace Fanuc.RobotInterface
         internal long AssignmentGeneration { get; private set; }
         public Exception LastError { get { lock (_LifecycleLock) return _LastError; } }
 
+        /// <summary>
+        /// Creates a wrapper with the default 10 ms delay between polling passes.
+        /// </summary>
         public ExRobotIF(RobotIF robot)
+            : this(robot, 10)
+        {
+        }
+
+        /// <summary>
+        /// Creates a wrapper with a delay in milliseconds between polling passes.
+        /// Values below 10 ms are silently raised to 10 ms. The delay applies
+        /// after each pass, including empty passes, and is not a refresh period.
+        /// </summary>
+        public ExRobotIF(RobotIF robot, int pollingDelay)
         {
             _Robot = robot ?? throw new ArgumentNullException(nameof(robot));
+            PollingDelay = Math.Max(10, pollingDelay);
 
             SDI = new RobotDataDictionary<int, RobotSignalHolderBase<bool>>(index => new DigitalInputHolder(this, index, IRobotIFExtension.OFFSET_SDIO));
             SDO = new RobotDataDictionary<int, RobotSignalHolderBase<bool>>(index => new DigitalOutputHolder(this, index, IRobotIFExtension.OFFSET_SDIO));
@@ -102,6 +116,9 @@ namespace Fanuc.RobotInterface
             PRG = new RobotDataDictionary<int, RobotDataHolderBase<RobotTaskStatus>>(index => new RobotTaskHolder(this, index % 10000, (RobotTaskType)(index / 10000)));
             ALM = new RobotDataDictionary<int, RobotDataHolderBase<RobotAlarm>>(index => new RobotAlarmHolder(this, Math.Abs(index), index < 0));
         }
+
+        /// <summary>The delay in milliseconds between polling passes.</summary>
+        public int PollingDelay { get; }
 
         /// <summary>
         /// Connects using an approximate TCP connect timeout and per-send/receive
@@ -221,7 +238,7 @@ namespace Fanuc.RobotInterface
                         session.Cancellation.Token.ThrowIfCancellationRequested();
                         holder.PullValue();
                     }
-                    if (session.Cancellation.Token.WaitHandle.WaitOne(10))
+                    if (session.Cancellation.Token.WaitHandle.WaitOne(PollingDelay))
                         break;
                 }
             }

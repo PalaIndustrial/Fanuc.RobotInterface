@@ -74,6 +74,11 @@ controller: it is not automatically replayed.
 Subscriptions run on the polling thread, so UI consumers must marshal updates
 to their UI thread and avoid blocking callbacks.
 
+`ExRobotIF` waits 10 ms between polling passes by default. To use a longer
+delay, construct it with `new ExRobotIF(new RobotIF(), pollingDelay: 100)`.
+The delay is in milliseconds; values below 10 are clamped to 10. It applies
+even when there are no holders, and is not a fixed refresh period.
+
 Polling and initialization failures are exposed through `LastError` and
 `PropertyChanged` notifications. `Disconnect()` interrupts active socket I/O
 and waits for the watcher; a callback that blocks can still delay shutdown.

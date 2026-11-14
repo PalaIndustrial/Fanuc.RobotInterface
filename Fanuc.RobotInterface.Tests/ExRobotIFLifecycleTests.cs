@@ -14,6 +14,75 @@ public sealed class ExRobotIFLifecycleTests
     private const int TimeoutMs = 5000;
 
     [TestMethod]
+#pragma warning disable MSTEST0045
+    [Timeout(15000)]
+#pragma warning restore MSTEST0045
+    public async Task ConfiguredDelayPacesPollingPasses()
+    {
+        var secondPoll = Signal();
+        using var server = new Controller(socket =>
+        {
+            InitializeRegister(socket);
+            ExpectPoll(socket);
+            Respond(socket);
+            Assert.IsFalse(socket.Poll(250000, SelectMode.SelectRead), "Next poll arrived before the configured delay.");
+            ExpectPoll(socket);
+            secondPoll.TrySetResult(true);
+            ExpectClosed(socket);
+        });
+        var robot = new ExRobotIF(new RobotIF(), 1000);
+        _ = robot.R[1];
+        try
+        {
+            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(secondPoll.Task);
+        }
+        finally
+        {
+            await Bounded(Task.Run(robot.Disconnect));
+        }
+        await server.Complete();
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+#pragma warning disable MSTEST0045
+    [Timeout(15000)]
+#pragma warning restore MSTEST0045
+    public async Task DisconnectInterruptsLongPollingDelay(bool withHolder)
+    {
+        var initialized = Signal();
+        using var server = new Controller(socket =>
+        {
+            Handshake(socket);
+            Command(socket, "CLRASG");
+            if (withHolder)
+            {
+                Command(socket, "SETASG 1 2 R[1] 0");
+                ExpectPoll(socket);
+                Respond(socket);
+            }
+            initialized.TrySetResult(true);
+            ExpectClosed(socket);
+        });
+        var robot = new ExRobotIF(new RobotIF(), 60000);
+        if (withHolder) _ = robot.R[1];
+        try
+        {
+            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(initialized.Task);
+            await Task.Delay(100);
+            await Bounded(Task.Run(robot.Disconnect));
+        }
+        finally
+        {
+            await Bounded(Task.Run(robot.Disconnect));
+        }
+        await server.Complete();
+    }
+
+    [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
 #pragma warning disable MSTEST0045 // The transport can block in synchronous socket calls.

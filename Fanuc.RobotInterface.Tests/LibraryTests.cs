@@ -59,15 +59,29 @@ public sealed class LibraryTests
     public void ExtendedInterfaceRequiresRobotIF()
     {
         var constructors = typeof(ExRobotIF).GetConstructors();
-        Assert.HasCount(1, constructors);
-        var parameters = constructors[0].GetParameters();
-        Assert.HasCount(1, parameters);
-        Assert.AreEqual(typeof(RobotIF), parameters[0].ParameterType);
+        Assert.HasCount(2, constructors);
+        Assert.IsNotNull(typeof(ExRobotIF).GetConstructor(new[] { typeof(RobotIF) }));
+        Assert.IsNotNull(typeof(ExRobotIF).GetConstructor(new[] { typeof(RobotIF), typeof(int) }));
 
         var robot = new ExRobotIF(new RobotIF());
         Assert.IsFalse(robot.IsConnected);
         Assert.IsNull(robot.Host);
         Assert.ThrowsExactly<ArgumentNullException>(() => new ExRobotIF(null!));
+        Assert.ThrowsExactly<ArgumentNullException>(() => new ExRobotIF(null!, 20));
+    }
+
+    [TestMethod]
+    [DataRow(int.MinValue, 10)]
+    [DataRow(-1, 10)]
+    [DataRow(0, 10)]
+    [DataRow(9, 10)]
+    [DataRow(10, 10)]
+    [DataRow(50, 50)]
+    [DataRow(int.MaxValue, int.MaxValue)]
+    public void ExtendedInterfaceClampsPollingDelay(int requested, int expected)
+    {
+        Assert.AreEqual(10, new ExRobotIF(new RobotIF()).PollingDelay);
+        Assert.AreEqual(expected, new ExRobotIF(new RobotIF(), requested).PollingDelay);
     }
 
 #if NET8_0

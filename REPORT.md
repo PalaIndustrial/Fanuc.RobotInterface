@@ -93,7 +93,9 @@ Sources: `Fanuc.RobotInterface.Extensions\ExRobotIF.cs`,
 - `ConnectAsync` coordinates a single session. It sends `CLRASG`, resets the
   allocator, rebuilds registered assignments and starts a background watcher.
   Initialization failures close the session; a later connection can retry.
-- The watcher pulls instantiated holders and waits 10 ms after each pass.
+- The watcher pulls instantiated holders and waits after each pass, including
+  empty passes. The constructor accepts a delay in milliseconds, defaulting to
+  10 and clamping smaller values to 10.
   New complex holders are assigned before their first read or write. Existing
   holders and subscriptions survive reconnect.
 - Writable holders expose `WriteAsync`; `Value` is the latest polled value.
@@ -163,7 +165,7 @@ the triggering conditions, not observed production incidents.
 |---|---|---|---|
 | F5 | High | Socket I/O can be interrupted and watcher overlap is prevented, but shutdown has no universal bound when timeouts are disabled or an HTTP operation or consumer callback remains blocked. | `ExRobotIF.cs`: `FinishStop`; `RobotIF.cs`: `Connect` |
 | F11 | Medium | Reads validate ACK format and minimum payload length, but fixed six-byte short payloads can contain indistinguishable padding. Handshake and write ACK types are not validated, and response identity and other fields are not correlated with requests; their semantics require investigation. | `RobotIF.cs`: handshake and read/write methods |
-| F13 | Medium | The background watcher now has a fixed 10 ms inter-pass wait, but idle CPU and active refresh cadence have not been separately measured or made configurable. | `ExRobotIF.cs`: `Watch` |
+| F13 | Nice to have | The watcher wakes after each configured inter-pass delay even when there are no holders. Idle CPU has not been measured. | `ExRobotIF.cs`: `Watch` |
 
 F3, F4, F6, F7 and F8 were addressed by the lifecycle changes. F9 and F10 were
 addressed by input validation. F12's dirty state was removed in favor of explicit
@@ -193,8 +195,8 @@ per-write tasks; a loopback test covers consecutive writes and their responses.
    investigate response identity before rejecting unverified field patterns.
 2. **Shutdown:** verify the remaining shutdown limits, particularly disabled
    timeouts, HTTP operations and consumer callbacks.
-3. **Polling:** verify idle and active polling cadence and consider a
-   configurable interval.
+3. **Polling:** consider event-driven idle waiting if periodic wakeups become
+   significant.
 4. **Regression coverage:** extend local TCP tests for response validation and
    protocol correlation, and verify behavior against a controller when available.
 

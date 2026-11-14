@@ -77,10 +77,6 @@ is still needed. `FANUCRobotTest` remains an interactive application.
   Reset `AssignmentOffset` after successful `CLRASG`, rebuild holder assignments,
   and reject allocations beyond the supported range. Verify repeated reconnects
   do not keep increasing offsets and that an exhausted allocation fails clearly.
-- [ ] **[MIDIUM] T13 - Pace polling and wait when there are no holders (F13).**
-  The watcher now waits 10 ms after each polling pass, including empty passes,
-  and wakes on cancellation. Verify idle behavior and active refresh cadence;
-  consider whether the interval should be configurable.
 - [ ] **[MIDIUM] T14 - Keep desktop connection and shutdown work off the UI thread.**
   Update `FANUCRobotTest\UI\MainWindow.xaml.cs` to await lifecycle operations,
   prevent conflicting button actions, and display failures without freezing the
@@ -111,6 +107,10 @@ is still needed. `FANUCRobotTest` remains an interactive application.
 
 These are optional design improvements, not additional confirmed defects.
 
+- [ ] **[NICETOHAVE] T13 - Avoid unnecessary idle polling wakeups (F13).**
+  The watcher waits after every pass, including empty passes. The delay is
+  configurable, defaults to 10 ms, and wakes on cancellation. Consider
+  event-driven idle waiting if periodic wakeups become significant.
 - [ ] **[NICETOHAVE] T02.2 - Test partial-send retries deterministically.**
   Prove that a partial `Socket.Send` return is retried; the slow-peer test does
   not guarantee that condition.
