@@ -35,10 +35,10 @@ public sealed class RobotIFTransportTests
             SendAll(socket, expected, 3, expected.Length - 3);
         });
 
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         try
         {
-            robot.Connect("127.0.0.1", server.Port, 3000);
+            robot.Connect(3000);
             CollectionAssert.AreEqual(expected, robot.ReadSNPX(1, (ushort)expected.Length));
             server.Complete();
         }
@@ -65,10 +65,10 @@ public sealed class RobotIFTransportTests
             if (extended)
                 SendAll(socket, new byte[] { 1, 2, 3, 4 });
         });
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         try
         {
-            robot.Connect("127.0.0.1", server.Port, 3000);
+            robot.Connect(3000);
             Action read = kind switch
             {
                 "DI" => () => robot.ReadDI(2, 49),
@@ -103,10 +103,10 @@ public sealed class RobotIFTransportTests
         using var output = new StringWriter();
         using var listener = new TextWriterTraceListener(output);
         Trace.Listeners.Add(listener);
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         try
         {
-            robot.Connect("127.0.0.1", server.Port, 3000);
+            robot.Connect(3000);
             switch (kind)
             {
                 case "DI":
@@ -145,10 +145,10 @@ public sealed class RobotIFTransportTests
         using var output = new StringWriter();
         using var listener = new TextWriterTraceListener(output);
         Trace.Listeners.Add(listener);
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         try
         {
-            robot.Connect("127.0.0.1", server.Port, 3000);
+            robot.Connect(3000);
             CollectionAssert.AreEqual(new byte[] { 7, 9 }, robot.ReadSNPX(1, 2));
             Trace.Flush();
             Assert.AreEqual("", output.ToString());
@@ -185,10 +185,10 @@ public sealed class RobotIFTransportTests
             nextResponse[44] = 42;
             SendAll(socket, nextResponse);
         });
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         try
         {
-            robot.Connect("127.0.0.1", server.Port, 3000);
+            robot.Connect(3000);
             Action read = kind switch
             {
                 "DI" => () => robot.ReadDI(1, 8),
@@ -218,10 +218,10 @@ public sealed class RobotIFTransportTests
             response[44] = 42;
             SendAll(socket, response);
         });
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         try
         {
-            robot.Connect("127.0.0.1", server.Port, 3000);
+            robot.Connect(3000);
             var error = Assert.ThrowsExactly<IOException>(() => robot.ReadSNPX(1, 2));
             StringAssert.Contains(error.Message, "returned 0 payload bytes; expected at least 2");
             server.Complete();
@@ -246,10 +246,10 @@ public sealed class RobotIFTransportTests
             response[31] = (byte)MessageType.SHORT_FAILED;
             SendAll(socket, response);
         });
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         try
         {
-            robot.Connect("127.0.0.1", server.Port, 3000);
+            robot.Connect(3000);
             Action read = kind switch
             {
                 "DI" => () => robot.ReadDI(1, 8),
@@ -278,11 +278,11 @@ public sealed class RobotIFTransportTests
             socket.Shutdown(SocketShutdown.Send);
         });
 
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         try
         {
             var error = Assert.ThrowsExactly<IOException>(
-                () => robot.Connect("127.0.0.1", server.Port, 3000));
+                () => robot.Connect(3000));
             Assert.IsInstanceOfType<EndOfStreamException>(error.InnerException);
             StringAssert.Contains(error.InnerException.Message, $"{bytesToSend} of 56");
             server.Complete();
@@ -357,10 +357,10 @@ public sealed class RobotIFTransportTests
             SendAll(socket, ResponseHeader());
         });
 
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         try
         {
-            robot.Connect("127.0.0.1", server.Port, 3000);
+            robot.Connect(3000);
             robot.WriteSNPX(1, expected);
             server.Complete();
             Assert.IsNotNull(received);
@@ -386,10 +386,10 @@ public sealed class RobotIFTransportTests
             Assert.AreEqual((byte)'K', request[49]);
             SendAll(socket, ResponseHeader());
         });
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         try
         {
-            robot.Connect("127.0.0.1", server.Port, 3000);
+            robot.Connect(3000);
             Action[] invalid =
             [
                 () => robot.ReadDI(0, 1),
@@ -515,10 +515,10 @@ public sealed class RobotIFTransportTests
             SendAll(socket, ResponseHeader(65534));
             SendAll(socket, new byte[65534]);
         });
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         try
         {
-            robot.Connect("127.0.0.1", server.Port, 3000);
+            robot.Connect(3000);
             CollectionAssert.AreEqual(new[] { true }, robot.ReadDI(65536, 1));
             CollectionAssert.AreEqual(new ushort[] { 0x1234 }, robot.ReadGI(65536, 1));
             CollectionAssert.AreEqual(new byte[] { 0x56, 0x78 }, robot.ReadSNPX(65536, 2));
@@ -585,10 +585,10 @@ public sealed class RobotIFTransportTests
             Assert.IsTrue(command.Skip(PacketBase.HEADER_LENGTH).All(b => b == (byte)'A'));
             SendAll(socket, ResponseHeader());
         });
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         try
         {
-            robot.Connect("127.0.0.1", server.Port, 3000);
+            robot.Connect(3000);
             robot.WriteSNPX(65536, 1, 2);
             robot.WriteSNPX(32770, new byte[65534]);
             robot.WriteGI(32770, new ushort[32767]);
@@ -605,7 +605,7 @@ public sealed class RobotIFTransportTests
     [TestMethod]
     public void RequestWithoutConnectionFailsClearly()
     {
-        var robot = new RobotIF();
+        var robot = new RobotIF("localhost");
         var error = Assert.ThrowsExactly<IOException>(() => robot.ReadDI(1, 1));
         StringAssert.Contains(error.Message, "not connected");
     }
@@ -645,7 +645,7 @@ public sealed class RobotIFTransportTests
             {
             }
         });
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         bool notificationRan = false;
         bool callbackOperationCompleted = false;
         robot.PropertyChanged += (_, e) =>
@@ -661,7 +661,7 @@ public sealed class RobotIFTransportTests
         };
         try
         {
-            robot.Connect("127.0.0.1", server.Port, 500);
+            robot.Connect(500);
             if (listenerThrows)
             {
                 var error = Assert.ThrowsExactly<AggregateException>(() => robot.WriteCommand("FIRST"));
@@ -702,10 +702,10 @@ public sealed class RobotIFTransportTests
             Assert.AreEqual((byte)3, request[2]);
             SendAll(socket, ResponseHeader());
         });
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         try
         {
-            robot.Connect("127.0.0.1", server.Port, 3000);
+            robot.Connect(3000);
             Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => robot.WriteDI(0, true));
             Assert.IsTrue(robot.IsConnected);
             Assert.ThrowsExactly<IOException>(() => robot.WriteCommand("FIRST"));
@@ -758,10 +758,10 @@ public sealed class RobotIFTransportTests
             }
         });
 
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         try
         {
-            robot.Connect("127.0.0.1", server.Port, 3000);
+            robot.Connect(3000);
             var first = Task.Run(() => robot.WriteDO(1, true));
             Assert.IsTrue(firstRead.Wait(3000));
             var second = Task.Run(() => { secondStarted.Set(); robot.WriteDO(2, true); });
@@ -794,9 +794,9 @@ public sealed class RobotIFTransportTests
             received.Set();
             Assert.AreEqual(0, socket.Receive(new byte[1]));
         });
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         var connect = Task.Run(() => Assert.ThrowsExactly<IOException>(
-            () => robot.Connect("127.0.0.1", server.Port, 30000)));
+            () => robot.Connect(30000)));
         try
         {
             Assert.IsTrue(received.Wait(3000));
@@ -832,7 +832,7 @@ public sealed class RobotIFTransportTests
             response[44] = 7;
             SendAll(socket, response);
         });
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         using var started = new ManualResetEventSlim();
         Exception? error = null;
         var queued = new Thread(() =>
@@ -843,7 +843,7 @@ public sealed class RobotIFTransportTests
         }) { IsBackground = true };
         try
         {
-            var connect = Task.Run(() => robot.Connect("127.0.0.1", server.Port, 3000));
+            var connect = Task.Run(() => robot.Connect(3000));
             Assert.IsTrue(received.Wait(3000));
             queued.Start();
             Assert.IsTrue(started.Wait(3000));
@@ -878,18 +878,18 @@ public sealed class RobotIFTransportTests
             ReadRequest(socket);
             SendAll(socket, ResponseHeader());
         });
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         using var started = new ManualResetEventSlim();
         Exception? error = null;
         var second = new Thread(() =>
         {
             started.Set();
-            try { robot.Connect("127.0.0.1", server.Port, 3000); }
+            try { robot.Connect(3000); }
             catch (Exception ex) { error = ex; }
         }) { IsBackground = true };
         try
         {
-            var first = Task.Run(() => robot.Connect("127.0.0.1", server.Port, 3000));
+            var first = Task.Run(() => robot.Connect(3000));
             Assert.IsTrue(received.Wait(3000));
             second.Start();
             Assert.IsTrue(started.Wait(3000));
@@ -913,14 +913,13 @@ public sealed class RobotIFTransportTests
     public void DisconnectInterruptsReadAndQueuedOperationCannotUseNewConnection()
     {
         using var received = new ManualResetEventSlim();
-        using var oldServer = new TestServer(socket =>
+        using var server = new TestServer(0, socket =>
         {
             Handshake(socket);
             ReadRequest(socket);
             received.Set();
             Assert.AreEqual(0, socket.Receive(new byte[1]));
-        });
-        using var newServer = new TestServer(socket =>
+        }, socket =>
         {
             Handshake(socket);
             var request = ReadRequest(socket);
@@ -929,7 +928,7 @@ public sealed class RobotIFTransportTests
             response[44] = 42;
             SendAll(socket, response);
         });
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         using var queuedStarted = new ManualResetEventSlim();
         Exception? queuedError = null;
         var queued = new Thread(() =>
@@ -940,7 +939,7 @@ public sealed class RobotIFTransportTests
         }) { IsBackground = true };
         try
         {
-            robot.Connect("127.0.0.1", oldServer.Port, 30000);
+            robot.Connect(30000);
             var blocked = Task.Run(() => Assert.Throws<Exception>(() => robot.ReadSNPX(1, 2)));
             Assert.IsTrue(received.Wait(3000));
             queued.Start();
@@ -948,12 +947,11 @@ public sealed class RobotIFTransportTests
             Assert.IsTrue(SpinWait.SpinUntil(() => (queued.ThreadState & System.Threading.ThreadState.WaitSleepJoin) != 0, 3000));
             robot.Disconnect();
             Assert.IsTrue(blocked.Wait(3000), "Disconnect did not interrupt the read.");
-            robot.Connect("127.0.0.1", newServer.Port, 3000);
+            robot.Connect(3000);
             Assert.IsTrue(queued.Join(3000));
             Assert.IsInstanceOfType<IOException>(queuedError);
             CollectionAssert.AreEqual(new byte[] { 42, 0 }, robot.ReadSNPX(1, 2));
-            oldServer.Complete();
-            newServer.Complete();
+            server.Complete();
         }
         finally
         {
@@ -964,27 +962,26 @@ public sealed class RobotIFTransportTests
     [TestMethod]
     public void FailedHandshakesCloseClientsAndAllowReconnect()
     {
-        var robot = new RobotIF();
+        void FailHandshake(Socket socket)
+        {
+            ReadRequest(socket);
+            var response = ResponseHeader();
+            response[31] = (byte)MessageType.SHORT_FAILED;
+            SendAll(socket, response);
+            Assert.AreEqual(0, socket.Receive(new byte[1]));
+        }
+        using var server = new TestServer(0, FailHandshake, FailHandshake, FailHandshake, Handshake);
+        var robot = new RobotIF("127.0.0.1", server.Port);
         try
         {
             for (var i = 0; i < 3; i++)
             {
-                using var server = new TestServer(socket =>
-                {
-                    ReadRequest(socket);
-                    var response = ResponseHeader();
-                    response[31] = (byte)MessageType.SHORT_FAILED;
-                    SendAll(socket, response);
-                    Assert.AreEqual(0, socket.Receive(new byte[1]));
-                });
-                Assert.ThrowsExactly<IOException>(() => robot.Connect("127.0.0.1", server.Port, 3000));
-                server.Complete();
+                Assert.ThrowsExactly<IOException>(() => robot.Connect(3000));
                 Assert.IsFalse(robot.IsConnected);
                 robot.Disconnect();
             }
-            using var success = new TestServer(Handshake);
-            robot.Connect("127.0.0.1", success.Port, 3000);
-            success.Complete();
+            robot.Connect(3000);
+            server.Complete();
             robot.Disconnect();
             robot.Disconnect();
             Assert.IsFalse(robot.IsConnected);
@@ -998,22 +995,22 @@ public sealed class RobotIFTransportTests
     [TestMethod]
     public void ConnectFailuresAllowRepeatedReconnect()
     {
-        using var server = new TestServer(Handshake);
         var closed = new TcpListener(IPAddress.Loopback, 0);
         closed.Start();
         var closedPort = (ushort)((IPEndPoint)closed.LocalEndpoint).Port;
         closed.Stop();
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", closedPort);
         try
         {
             for (var i = 0; i < 3; i++)
             {
-                Assert.ThrowsExactly<IOException>(() => robot.Connect(null!, server.Port, 3000));
-                Assert.ThrowsExactly<IOException>(() => robot.Connect("127.0.0.1", closedPort, 3000));
+                Assert.ThrowsExactly<ArgumentNullException>(() => new RobotIF(null!, closedPort));
+                Assert.ThrowsExactly<IOException>(() => robot.Connect(3000));
                 Assert.IsFalse(robot.IsConnected);
                 robot.Disconnect();
             }
-            robot.Connect("127.0.0.1", server.Port, 3000);
+            using var server = new TestServer(Handshake, closedPort);
+            robot.Connect(3000);
             server.Complete();
         }
         finally
@@ -1028,14 +1025,14 @@ public sealed class RobotIFTransportTests
         var listener = new TcpListener(IPAddress.Loopback, 0);
         var probes = new List<TcpClient>();
         Task? pending = null;
-        var robot = new RobotIF();
-        var noTimeout = new RobotIF();
-        var racing = new RobotIF();
-        var wrapper = new ExRobotIF(new RobotIF());
+        listener.Start(1);
+        var port = (ushort)((IPEndPoint)listener.LocalEndpoint).Port;
+        var robot = new RobotIF("127.0.0.1", port);
+        var noTimeout = new RobotIF("127.0.0.1", port);
+        var racing = new RobotIF("127.0.0.1", port);
+        var wrapper = new ExRobotIF(new RobotIF("127.0.0.1", port));
         try
         {
-            listener.Start(1);
-            var port = (ushort)((IPEndPoint)listener.LocalEndpoint).Port;
             for (var i = 0; i < 32; i++)
             {
                 var probe = new TcpClient();
@@ -1061,7 +1058,7 @@ public sealed class RobotIFTransportTests
             Assert.IsNotNull(clientField);
             Socket? attemptedSocket = null;
             var attempt = Task.Run(() => Assert.ThrowsExactly<IOException>(
-                () => robot.Connect("127.0.0.1", port, 1000)));
+                () => robot.Connect(1000)));
             Assert.IsTrue(SpinWait.SpinUntil(() =>
             {
                 var client = clientField.GetValue(robot) as TcpClient;
@@ -1078,14 +1075,14 @@ public sealed class RobotIFTransportTests
             Assert.ThrowsExactly<ObjectDisposedException>(() => _ = attemptedSocket.Available);
 
             var wrapperError = Assert.ThrowsExactlyAsync<IOException>(
-                () => wrapper.ConnectAsync("127.0.0.1", port, 300)).GetAwaiter().GetResult();
+                () => wrapper.ConnectAsync(300)).GetAwaiter().GetResult();
             Assert.IsInstanceOfType<TimeoutException>(wrapperError.InnerException);
             Assert.IsFalse(wrapper.IsConnected);
             Assert.IsNotNull(wrapper.LastError);
 
             var waiting = Task.Run(() =>
             {
-                return Assert.ThrowsExactly<IOException>(() => noTimeout.Connect("127.0.0.1", port, 0));
+                return Assert.ThrowsExactly<IOException>(() => noTimeout.Connect(0));
             });
             Socket? waitingSocket = null;
             Assert.IsTrue(SpinWait.SpinUntil(() =>
@@ -1112,7 +1109,7 @@ public sealed class RobotIFTransportTests
             try
             {
                 racingAttempt = Task.Run(() => Assert.ThrowsExactly<IOException>(
-                    () => racing.Connect("127.0.0.1", port, 500)));
+                    () => racing.Connect(500)));
                 Assert.IsTrue(SpinWait.SpinUntil(() =>
                 {
                     var client = clientField.GetValue(racing) as TcpClient;
@@ -1134,21 +1131,21 @@ public sealed class RobotIFTransportTests
             Assert.IsNotNull(racingSocket);
             Assert.ThrowsExactly<ObjectDisposedException>(() => _ = racingSocket.Available);
 
-            using var server = new TestServer(Handshake);
-            robot.Connect("127.0.0.1", server.Port, 3000);
-            Assert.IsTrue(robot.IsConnected);
-            server.Complete();
-
-            using var wrapperServer = new TestServer(socket =>
+            listener.Stop();
+            foreach (var probe in probes)
+                probe.Dispose();
+            using var server = new TestServer(port, Handshake, socket =>
             {
                 Handshake(socket);
                 ReadRequest(socket);
                 SendAll(socket, ResponseHeader());
             });
-            wrapper.ConnectAsync("127.0.0.1", wrapperServer.Port, 3000).GetAwaiter().GetResult();
+            robot.Connect(3000);
+            Assert.IsTrue(robot.IsConnected);
+            wrapper.ConnectAsync(3000).GetAwaiter().GetResult();
             Assert.IsTrue(wrapper.IsConnected);
             Assert.IsNull(wrapper.LastError);
-            wrapperServer.Complete();
+            server.Complete();
         }
         finally
         {
@@ -1172,10 +1169,10 @@ public sealed class RobotIFTransportTests
     public void ConnectSupportsIpAndHostnameWithConfiguredTimeout(string host, int timeout)
     {
         using var server = new TestServer(Handshake);
-        var robot = new RobotIF();
+        var robot = new RobotIF(host, server.Port);
         try
         {
-            robot.Connect(host, server.Port, timeout);
+            robot.Connect(timeout);
             Assert.IsTrue(robot.IsConnected);
             server.Complete();
         }
@@ -1200,7 +1197,7 @@ public sealed class RobotIFTransportTests
             responseSent.Set();
             Assert.AreEqual(0, socket.Receive(new byte[1]));
         });
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         var clientField = typeof(RobotIF).GetField("TcpClient", BindingFlags.Instance | BindingFlags.NonPublic);
         var disposeField = typeof(RobotIF).GetField("ClientDisposeLock", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.IsNotNull(clientField);
@@ -1209,7 +1206,7 @@ public sealed class RobotIFTransportTests
         Assert.IsNotNull(disposeLock);
         Task? disconnect = null;
         var connect = Task.Run(() => Assert.ThrowsExactly<IOException>(
-            () => robot.Connect("127.0.0.1", server.Port, 3000)));
+            () => robot.Connect(3000)));
         try
         {
             Assert.IsTrue(requestReceived.Wait(3000));
@@ -1263,12 +1260,12 @@ public sealed class RobotIFTransportTests
             socket.Shutdown(SocketShutdown.Send);
         });
 
-        var robot = new RobotIF();
+        var robot = new RobotIF("127.0.0.1", server.Port);
         try
         {
             if (duringRead)
             {
-                robot.Connect("127.0.0.1", server.Port, 3000);
+                robot.Connect(3000);
                 var error = Assert.ThrowsExactly<EndOfStreamException>(() => robot.ReadSNPX(1, 8));
                 StringAssert.Contains(error.Message, "3 of 8");
                 Assert.IsFalse(robot.IsConnected);
@@ -1276,7 +1273,7 @@ public sealed class RobotIFTransportTests
             else
             {
                 var error = Assert.ThrowsExactly<IOException>(
-                    () => robot.Connect("127.0.0.1", server.Port, 3000));
+                    () => robot.Connect(3000));
                 Assert.IsInstanceOfType<EndOfStreamException>(error.InnerException);
                 StringAssert.Contains(error.InnerException.Message, "3 of 8");
             }
@@ -1334,22 +1331,31 @@ public sealed class RobotIFTransportTests
 
     private sealed class TestServer : IDisposable
     {
-        private readonly TcpListener _listener = new TcpListener(IPAddress.Loopback, 0);
+        private readonly TcpListener _listener;
         private readonly Task _task;
 
         public ushort Port { get; }
 
-        public TestServer(Action<Socket> handler)
+        public TestServer(Action<Socket> handler, ushort port = 0)
+            : this(port, handler)
         {
+        }
+
+        public TestServer(ushort port, params Action<Socket>[] handlers)
+        {
+            _listener = new TcpListener(IPAddress.Loopback, port);
             _listener.Start();
             Port = (ushort)((IPEndPoint)_listener.LocalEndpoint).Port;
             _task = Task.Run(() =>
             {
-                using var socket = _listener.AcceptSocket();
-                socket.NoDelay = true;
-                socket.ReceiveTimeout = 3000;
-                socket.SendTimeout = 3000;
-                handler(socket);
+                foreach (var handler in handlers)
+                {
+                    using var socket = _listener.AcceptSocket();
+                    socket.NoDelay = true;
+                    socket.ReceiveTimeout = 3000;
+                    socket.SendTimeout = 3000;
+                    handler(socket);
+                }
             });
         }
 

@@ -15,10 +15,12 @@ namespace Fanuc.RobotInterface
                     return _Session != null && _Session.Ready && _Robot.IsConnected;
             }
         }
-        public string Host => ((IRobotIF)_Robot).Host;
+        public string Host => _Robot.Host;
+        public ushort SrtpPort => _Robot.SrtpPort;
+        public ushort HttpPort => _Robot.HttpPort;
 
         /// <inheritdoc />
-        public void Connect(string host, ushort port = RobotIF.DEFAULT_PORT, int timeout = RobotIF.DEFAULT_TIMEOUT)
+        public void Connect(int timeout = RobotIF.DEFAULT_TIMEOUT)
         {
             lock (_LifecycleLock)
             {
@@ -33,7 +35,7 @@ namespace Fanuc.RobotInterface
                     (IsInCallback(_Session) || Thread.CurrentThread == _Session.Watcher))
                     throw new InvalidOperationException("Cannot synchronously connect from a connection callback.");
             }
-            ConnectAsync(host, port, timeout).GetAwaiter().GetResult();
+            ConnectAsync(timeout).GetAwaiter().GetResult();
         }
 
         public void Disconnect()
@@ -57,6 +59,8 @@ namespace Fanuc.RobotInterface
         }
 
         public void ClearAlarm() => _InvokeIfConnected(CaptureReadySession(), () => { _Robot.ClearAlarm(); return true; }).GetAwaiter().GetResult();
+        public string ExecuteKCL(string command) => _Robot.ExecuteKCL(command);
+        public string ExecuteKarel(string program) => _Robot.ExecuteKarel(program);
 
         public bool[] ReadDI(int index, ushort count) => AsyncReadDI(index, count).GetAwaiter().GetResult();
         public bool[] ReadDO(int index, ushort count) => AsyncReadDO(index, count).GetAwaiter().GetResult();

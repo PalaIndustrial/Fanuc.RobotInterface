@@ -11,7 +11,7 @@ public sealed class ExRobotIFTests
     [TestMethod]
     public void SignalHoldersRejectIndexesOutsideTheirOffsetRange()
     {
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("localhost"));
 
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = robot.UI[0]);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = robot.UI[-5999]);
@@ -28,7 +28,7 @@ public sealed class ExRobotIFTests
     [TestMethod]
     public async Task DisconnectedOperationsReportTheirCaller()
     {
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("localhost"));
 
         var readError = await Assert.ThrowsExactlyAsync<IOException>(() => robot.AsyncReadDI(1, 1));
         StringAssert.Contains(readError.Message, nameof(ExRobotIF.AsyncReadDI));
@@ -79,10 +79,10 @@ public sealed class ExRobotIFTests
                 throw new TimeoutException("Client did not finish.");
         });
 
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", port));
         try
         {
-            await robot.ConnectAsync("127.0.0.1", port, 3000);
+            await robot.ConnectAsync(3000);
             Assert.IsTrue(robot.IsConnected);
             Assert.AreEqual("127.0.0.1", robot.Host);
             var input = await robot.AsyncReadDI(1, 1);

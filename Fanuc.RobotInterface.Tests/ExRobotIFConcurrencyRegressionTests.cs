@@ -41,20 +41,20 @@ public sealed class ExRobotIFConcurrencyRegressionTests
             Respond(socket, 1);
             Assert.AreEqual(0, socket.Receive(new byte[1]));
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", port));
         var holder = robot.SDI[1];
         holder.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName != "Value") return;
             robot.Disconnect();
-            pending = robot.ConnectAsync("127.0.0.1", port, TimeoutMs);
+            pending = robot.ConnectAsync(TimeoutMs);
             robot.Disconnect();
             callbackEntered.TrySetResult(true);
             Assert.IsTrue(callbackRelease.Wait(TimeoutMs));
         };
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(callbackEntered.Task);
             callbackRelease.Set();
             Assert.IsNotNull(pending);
@@ -86,7 +86,7 @@ public sealed class ExRobotIFConcurrencyRegressionTests
         Exception? rejected = null;
         Exception? assignmentRejected = null;
         Exception? connectionRejected = null;
-        var backend = new RobotIF();
+        var backend = new RobotIF("127.0.0.1", port);
         var robot = new ExRobotIF(backend);
         _ = robot.R[1];
         backend.PropertyChanged += (_, e) =>
@@ -96,7 +96,7 @@ public sealed class ExRobotIFConcurrencyRegressionTests
             catch (Exception ex) { rejected = ex; }
             try { robot.AsyncWriteAssignment(2, "R[2] 0").GetAwaiter().GetResult(); }
             catch (Exception ex) { assignmentRejected = ex; }
-            try { robot.ConnectAsync("127.0.0.1", port, TimeoutMs).GetAwaiter().GetResult(); }
+            try { robot.ConnectAsync(TimeoutMs).GetAwaiter().GetResult(); }
             catch (Exception ex) { connectionRejected = ex; }
             callback.TrySetResult(true);
         };
@@ -114,7 +114,7 @@ public sealed class ExRobotIFConcurrencyRegressionTests
         });
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(callback.Task);
             await Bounded(polled.Task);
             Assert.IsInstanceOfType<IOException>(rejected);
@@ -178,14 +178,14 @@ public sealed class ExRobotIFConcurrencyRegressionTests
                 Assert.AreEqual(0, socket.Receive(new byte[1]));
             }
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", port));
         var reset = Signal();
         robot.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(ExRobotIF.LastError) && robot.LastError == null)
             {
-                Assert.ThrowsExactly<InvalidOperationException>(() => robot.Connect("127.0.0.1", port, TimeoutMs));
-                Assert.IsFalse(robot.ConnectAsync("127.0.0.1", port, TimeoutMs).IsCompleted);
+                Assert.ThrowsExactly<InvalidOperationException>(() => robot.Connect(TimeoutMs));
+                Assert.IsFalse(robot.ConnectAsync(TimeoutMs).IsCompleted);
                 reset.TrySetResult(true);
             }
         };
@@ -193,12 +193,12 @@ public sealed class ExRobotIFConcurrencyRegressionTests
         {
             try
             {
-                await Bounded(robot.ConnectAsync("127.0.0.1", port, TimeoutMs));
+                await Bounded(robot.ConnectAsync(TimeoutMs));
                 Assert.Fail("Expected initialization failure.");
             }
             catch (IOException) { }
             Assert.IsNotNull(robot.LastError);
-            await Bounded(robot.ConnectAsync("127.0.0.1", port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             Assert.IsTrue(reset.Task.IsCompleted, "Error reset was not notified before connect completed.");
             Assert.IsNull(robot.LastError);
         }
@@ -221,7 +221,7 @@ public sealed class ExRobotIFConcurrencyRegressionTests
                 Assert.AreEqual(0, socket.Receive(new byte[1]));
             }
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", port));
         var error = new InvalidOperationException("Subscriber failed.");
         var called = 0;
         robot.PropertyChanged += (_, e) =>
@@ -234,13 +234,13 @@ public sealed class ExRobotIFConcurrencyRegressionTests
         {
             try
             {
-                await Bounded(robot.ConnectAsync("127.0.0.1", port, TimeoutMs));
+                await Bounded(robot.ConnectAsync(TimeoutMs));
                 Assert.Fail("Expected subscriber failure.");
             }
             catch (InvalidOperationException ex) { Assert.AreSame(error, ex); }
             Assert.IsFalse(robot.IsConnected);
             Assert.AreSame(error, robot.LastError);
-            await Bounded(robot.ConnectAsync("127.0.0.1", port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             Assert.IsTrue(robot.IsConnected);
         }
         finally { robot.Disconnect(); }
@@ -261,22 +261,22 @@ public sealed class ExRobotIFConcurrencyRegressionTests
             Initialize(socket);
             Assert.AreEqual(0, socket.Receive(new byte[1]));
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", port));
         var error = new InvalidOperationException("Notification failure.");
         robot.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName != nameof(ExRobotIF.IsConnected) || !robot.IsConnected) return;
-            Assert.ThrowsExactly<InvalidOperationException>(() => robot.Connect("127.0.0.1", port, TimeoutMs));
-            Assert.IsFalse(robot.ConnectAsync("127.0.0.1", port, TimeoutMs).IsCompleted);
+            Assert.ThrowsExactly<InvalidOperationException>(() => robot.Connect(TimeoutMs));
+            Assert.IsFalse(robot.ConnectAsync(TimeoutMs).IsCompleted);
             entered.TrySetResult(true);
             Assert.IsTrue(release.Wait(TimeoutMs));
             throw error;
         };
         try
         {
-            var first = robot.ConnectAsync("127.0.0.1", port, TimeoutMs);
+            var first = robot.ConnectAsync(TimeoutMs);
             await Bounded(entered.Task);
-            var second = robot.ConnectAsync("127.0.0.1", port, TimeoutMs);
+            var second = robot.ConnectAsync(TimeoutMs);
             Assert.IsFalse(second.IsCompleted);
             release.Set();
             foreach (var task in new[] { first, second })
@@ -311,7 +311,7 @@ public sealed class ExRobotIFConcurrencyRegressionTests
                 Respond(socket, 1);
             }
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", port));
         var holder = robot.SDI[1];
         var error = new InvalidOperationException("Success notification failed.");
         robot.PropertyChanged += (_, e) =>
@@ -325,13 +325,13 @@ public sealed class ExRobotIFConcurrencyRegressionTests
         {
             if (e.PropertyName != "Value") return;
             Assert.IsTrue(successEntered.Wait(TimeoutMs));
-            Assert.ThrowsExactly<InvalidOperationException>(() => robot.Connect("127.0.0.1", port, TimeoutMs));
-            watcherConnect = robot.ConnectAsync("127.0.0.1", port, TimeoutMs);
+            Assert.ThrowsExactly<InvalidOperationException>(() => robot.Connect(TimeoutMs));
+            watcherConnect = robot.ConnectAsync(TimeoutMs);
             watcherEntered.TrySetResult(true);
         };
         try
         {
-            var first = robot.ConnectAsync("127.0.0.1", port, TimeoutMs);
+            var first = robot.ConnectAsync(TimeoutMs);
             await Bounded(watcherEntered.Task);
             Assert.IsNotNull(watcherConnect);
             Assert.IsFalse(watcherConnect!.IsCompleted);
@@ -374,23 +374,23 @@ public sealed class ExRobotIFConcurrencyRegressionTests
                 Assert.AreEqual(0, socket.Receive(new byte[1]));
             }
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", port));
         robot.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName != nameof(ExRobotIF.LastError) || robot.LastError == null) return;
             observed = robot.LastError;
             Assert.IsFalse(robot.IsConnected);
             robot.Disconnect();
-            Assert.ThrowsExactly<InvalidOperationException>(() => robot.Connect("127.0.0.1", port, TimeoutMs));
-            reentrantConnect = robot.ConnectAsync("127.0.0.1", port, TimeoutMs);
+            Assert.ThrowsExactly<InvalidOperationException>(() => robot.Connect(TimeoutMs));
+            reentrantConnect = robot.ConnectAsync(TimeoutMs);
             entered.TrySetResult(true);
             Assert.IsTrue(release.Wait(TimeoutMs));
         };
         try
         {
-            var failed = robot.ConnectAsync("127.0.0.1", port, TimeoutMs);
+            var failed = robot.ConnectAsync(TimeoutMs);
             await Bounded(entered.Task);
-            var concurrent = robot.ConnectAsync("127.0.0.1", port, TimeoutMs);
+            var concurrent = robot.ConnectAsync(TimeoutMs);
             Assert.AreSame(observed, robot.LastError);
             Assert.IsFalse(connected.Task.IsCompleted);
             Assert.IsFalse(concurrent.IsCompleted);
@@ -436,18 +436,18 @@ public sealed class ExRobotIFConcurrencyRegressionTests
                 Assert.AreEqual(0, socket.Receive(new byte[1]));
             }
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", port));
         var holder = new DelayedAssignmentHolder(robot, entered, release);
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             var assignment = holder.WriteAsync(false);
             await Bounded(entered.Task);
             Assert.AreNotSame(TaskScheduler.Default, holder.AssignmentScheduler,
                 "The holder mutated its assignment outside the session scheduler.");
             var disconnect = Task.Run(robot.Disconnect);
             await Bounded(closed.Task);
-            var reconnect = robot.ConnectAsync("127.0.0.1", port, TimeoutMs);
+            var reconnect = robot.ConnectAsync(TimeoutMs);
             Assert.IsFalse(reconnected.Task.IsCompleted);
             release.Set();
             await Bounded(assignment);
@@ -478,15 +478,15 @@ public sealed class ExRobotIFConcurrencyRegressionTests
                 Assert.AreEqual(0, socket.Receive(new byte[1]), "An old write reached the new session.");
             }
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", port));
         var holder = new PreparingHolder(robot, preparing, release);
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             var write = Task.Run(() => holder.WriteAsync(true));
             await Bounded(preparing.Task);
             await Bounded(Task.Run(robot.Disconnect));
-            await Bounded(robot.ConnectAsync("127.0.0.1", port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             release.Set();
             try { await Bounded(write); Assert.Fail("Expected stale write to fail."); }
             catch (IOException) { }

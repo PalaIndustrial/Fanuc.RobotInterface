@@ -1,4 +1,5 @@
 ﻿using Fanuc.RobotInterface;
+using Newtonsoft.Json;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
@@ -18,6 +19,14 @@ namespace FANUCRobotTest
             private ushort _RobotPort;
             [DefaultValue((ushort)RobotIF.DEFAULT_PORT)]
             public ushort RobotPort { get => _RobotPort; set => SetProperty(ref _RobotPort, value); }
+
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
+            private ushort _RobotHttpPort;
+            [DefaultValue((ushort)RobotIF.DEFAULT_HTTP_PORT)]
+            public ushort RobotHttpPort { get => _RobotHttpPort; set => SetProperty(ref _RobotHttpPort, value); }
+
+            [JsonIgnore]
+            public bool HasValidEndpoint => !string.IsNullOrWhiteSpace(RobotHost) && RobotPort != 0 && RobotHttpPort != 0;
 
             [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             private int _RobotTimeout;

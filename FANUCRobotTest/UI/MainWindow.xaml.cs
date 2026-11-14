@@ -3,7 +3,10 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Threading;
 using Wpf.Ui.Appearance;
 using FluentWindow = Wpf.Ui.Controls.FluentWindow;
 using WindowBackdropType = Wpf.Ui.Controls.WindowBackdropType;
@@ -33,8 +36,6 @@ namespace FANUCRobotTest.UI
 
         public SettingsT Settings { get; } = new SettingsT("Settings.MainWindow.json");
 
-        public IExRobotIF RobotIF { get; } = new ExRobotIF(new RobotIF());
-
         public static readonly DependencyProperty RobotProperty = DependencyProperty.Register(nameof(Robot), typeof(IExRobotIF), typeof(MainWindow), new PropertyMetadata(null));
 
         public IExRobotIF Robot { get => (IExRobotIF)GetValue(RobotProperty); set => SetValue(RobotProperty, value); }
@@ -44,18 +45,30 @@ namespace FANUCRobotTest.UI
             SystemThemeWatcher.Watch(this, WindowBackdropType.None);
             InitializeComponent();
             Settings.PropertyChanged += (s, e) => Settings.Save();
-        }
-        private void Window_Loaded(object sender, RoutedEventArgs e)
-        {
-            Robot = RobotIF;
 
-            //var proto = new ServiceRequestTransferProtocol();
-            //proto.Test();
+            var settings = App.Instance.Settings;
+            if (settings.HasValidEndpoint)
+                Robot = CreateRobot(settings.RobotHost, settings.RobotPort, settings.RobotHttpPort);
+        }
+
+        private ExRobotIF CreateRobot(string host, ushort srtpPort, ushort httpPort)
+        {
+            var context = SynchronizationContext.Current;
+            try
+            {
+                // Holder dictionaries capture the current context for collection notifications.
+                SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher));
+                return new ExRobotIF(new RobotIF(host, srtpPort, httpPort));
+            }
+            finally
+            {
+                SynchronizationContext.SetSynchronizationContext(context);
+            }
         }
 
         private void Window_Closed(object sender, EventArgs e)
         {
-            Robot.Disconnect();
+            Robot?.Disconnect();
             Application.Current.Shutdown();
         }
 
@@ -63,10 +76,29 @@ namespace FANUCRobotTest.UI
         {
             try
             {
-                if (Robot.IsConnected)
+                if (Robot?.IsConnected == true)
                     Robot.Disconnect();
                 else
-                    Robot.Connect(App.Instance.Settings.RobotHost, App.Instance.Settings.RobotPort, App.Instance.Settings.RobotTimeout);
+                {
+                    foreach (var box in new[] { HostTextBox, SrtpPortTextBox, HttpPortTextBox, TimeoutTextBox })
+                    {
+                        box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+                        if (Validation.GetHasError(box))
+                            throw new ArgumentException("Check the connection settings.");
+                    }
+
+                    var settings = App.Instance.Settings;
+                    if (!settings.HasValidEndpoint)
+                        throw new ArgumentException("Enter a host and nonzero SRTP and HTTP ports.");
+                    if (Robot == null || Robot.Host != settings.RobotHost || Robot.SrtpPort != settings.RobotPort || Robot.HttpPort != settings.RobotHttpPort)
+                    {
+                        var replacement = CreateRobot(settings.RobotHost, settings.RobotPort, settings.RobotHttpPort);
+                        Robot?.Disconnect();
+                        Robot = replacement;
+                        RobotDisplay.GetBindingExpression(RobotDisplayExtended.RobotProperty)?.UpdateTarget();
+                    }
+                    Robot.Connect(settings.RobotTimeout);
+                }
             }
             catch (Exception ex)
             {

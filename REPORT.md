@@ -21,7 +21,7 @@ controller command, or UI binding.
 | Project | Responsibility | Targets |
 |---|---|---|
 | `Fanuc.SRTP` | SRTP packet models and serialization | `net48`, `netstandard2.0`, `net10.0` |
-| `Fanuc.RobotInterface` | `IRobotIF`, synchronous `RobotIF`, I/O and HTTP extensions, robot data models | `net48`, `netstandard2.0`, `net10.0` |
+| `Fanuc.RobotInterface` | `IRobotIF`, synchronous `RobotIF`, HTTP helpers, I/O extensions, robot data models | `net48`, `netstandard2.0`, `net10.0` |
 | `Fanuc.RobotInterface.Extensions` | `IExRobotIF`, `ExRobotIF`, signal/data holders, dictionaries and scheduler | `net48`, `netstandard2.0`, `net10.0` |
 | `FANUCRobotTest` | Interactive WPF application using `RobotIF` | `net10.0-windows10.0.18362.0` |
 
@@ -31,10 +31,10 @@ controller command, or UI binding.
 - The solution is `Fanuc.RobotInterface.slnx`.
 - Extended interface types retain the `Fanuc.RobotInterface` namespace despite
   moving to the Extensions assembly. SRTP types use `Fanuc.SRTP`.
-- `IRobotIF.Host` is required. `RobotIF` implements it explicitly; `ExRobotIF`
-  exposes a public property.
-- `ExecuteKCL`, `ExecuteKarel`, and `ResetAlarm` are core extension methods,
-  not `IRobotIF` instance members. `ClearAlarm` remains an interface member.
+- `RobotIF` is constructed with an immutable host and independent SRTP and HTTP
+  ports, exposed through `IRobotIF` and `ExRobotIF`.
+- `ExecuteKCL` and `ExecuteKarel` are `IRobotIF` instance members; `ResetAlarm`
+  remains an extension method. `ClearAlarm` is an interface member.
 - Dictionaries report their actual count and forward collection/property
   notifications. Their concrete implementation and the scheduler are internal.
 - `CHANGELOG.md` and `MIGRATION.md` document the package split, compatibility
@@ -65,7 +65,7 @@ Source: `Fanuc.RobotInterface\RobotIF.cs`, especially `Connect`, `Disconnect`,
 4. On failure it disposes the client and wraps the error in an `IOException`.
    Successful completion raises `IsConnected` notification.
 
-The default port is 60008 and the default timeout is 10,000 ms. It applies
+The default SRTP port is 60008 and the default timeout is 10,000 ms. It applies
 approximately to TCP connect and to each socket send/receive, including the
 SRTP handshake. It is not an overall handshake deadline. Zero disables the
 configured timeouts; operating-system limits can still apply. On older targets,
@@ -78,7 +78,8 @@ it is not a heartbeat or a guarantee that the next operation will succeed.
 lock, allowing blocked socket I/O to be interrupted. Queued operations cannot
 cross into a later connection. An incomplete send or receive invalidates the
 connection, preventing a delayed response from being mistaken for a later
-request's acknowledgment. The stored host remains after disconnect.
+request's acknowledgment. The configured host and ports remain after disconnect
+or a failed connection.
 Neither the core interface nor implementation exposes caller cancellation or
 an `IDisposable` lifecycle contract.
 
@@ -109,24 +110,24 @@ Sources: `Fanuc.RobotInterface.Extensions\ExRobotIF.cs`,
   cleanup errors. The async methods schedule blocking work; they are not
   nonblocking socket APIs.
 
-Socket closure interrupts active transport I/O, but a blocked user callback,
-HTTP operation or a connection with disabled timeouts can delay shutdown. Callers
+Socket closure interrupts active transport I/O, but a blocked user callback
+or a connection with disabled timeouts can delay shutdown. Callers
 cannot supply their own cancellation token. Dropping a returned task does not
 cancel it.
 
 ### HTTP helpers and desktop application
 
-Source: `Fanuc.RobotInterface\IRobotIFExtension.cs`.
+Source: `Fanuc.RobotInterface\RobotIF.Http.cs`.
 
-KCL and Karel helpers use a shared `HttpClient`, construct HTTP requests from
-`IRobotIF.Host`, and synchronously wait for responses. Their timeout is separate
-from the TCP timeout. They do not enforce an SRTP-connected-state guard.
-`ExRobotIF.AsyncExecuteKCL` and `AsyncExecuteKarel` schedule those blocking
-helpers; calling the synchronous extension methods directly bypasses that
-scheduler. `RobotIF.Host` remains populated after disconnect, so an HTTP call
-can still target the previous controller.
+Each `RobotIF` lazily creates its own `HttpClient`; the disposal lifecycle is
+not yet defined. KCL and Karel use the configured host and HTTP port and
+synchronously wait for responses. Their timeout is separate from the SRTP
+timeout. Both direct calls and `ExRobotIF`'s async HTTP helpers work without
+an SRTP connection. The wrapper schedules HTTP calls independently of its
+session scheduler, so they are not canceled or drained by SRTP disconnect.
 
-`FANUCRobotTest\UI\MainWindow.xaml.cs` uses `new ExRobotIF(new RobotIF())`.
+`FANUCRobotTest\UI\MainWindow.xaml.cs` constructs an `ExRobotIF` for the
+configured controller endpoint and replaces it when the endpoint changes.
 Its button handler connects/disconnects synchronously on the UI
 thread. Closing the window calls `Disconnect` before application shutdown.
 Long-running connection or queued I/O can therefore delay UI response or exit.
@@ -163,7 +164,7 @@ the triggering conditions, not observed production incidents.
 
 | ID | Priority | Finding and consequence | Source |
 |---|---|---|---|
-| F5 | High | Socket I/O can be interrupted and watcher overlap is prevented, but shutdown has no universal bound when timeouts are disabled or an HTTP operation or consumer callback remains blocked. | `ExRobotIF.cs`: `FinishStop`; `RobotIF.cs`: `Connect` |
+| F5 | High | Socket I/O can be interrupted and watcher overlap is prevented, but shutdown has no universal bound when timeouts are disabled or a consumer callback remains blocked. | `ExRobotIF.cs`: `FinishStop`; `RobotIF.cs`: `Connect` |
 | F11 | Medium | Reads validate ACK format and minimum payload length, but fixed six-byte short payloads can contain indistinguishable padding. Handshake and write ACK types are not validated, and response identity and other fields are not correlated with requests; their semantics require investigation. | `RobotIF.cs`: handshake and read/write methods |
 | F13 | Nice to have | The watcher wakes after each configured inter-pass delay even when there are no holders. Idle CPU has not been measured. | `ExRobotIF.cs`: `Watch` |
 
@@ -194,7 +195,7 @@ per-write tasks; a loopback test covers consecutive writes and their responses.
 1. **Transport correctness:** add deterministic partial-send coverage and
    investigate response identity before rejecting unverified field patterns.
 2. **Shutdown:** verify the remaining shutdown limits, particularly disabled
-   timeouts, HTTP operations and consumer callbacks.
+   timeouts and consumer callbacks.
 3. **Polling:** consider event-driven idle waiting if periodic wakeups become
    significant.
 4. **Regression coverage:** extend local TCP tests for response validation and
@@ -206,8 +207,8 @@ they do not replace controller interlocks or other machine-safety mechanisms.
 ## Validation status
 
 - The Visual Studio workspace build succeeded. The last full library test run
-  passed 241 tests across .NET Framework 4.8, .NET 8 (using .NET Standard 2.0
-  assets) and .NET 10. The last desktop test run passed 15 Windows/.NET 10 tests.
+  passed 289 tests across .NET Framework 4.8, .NET 8 (using .NET Standard 2.0
+  assets) and .NET 10. The last desktop test run passed 18 Windows/.NET 10 tests.
   A combined Test Explorer run reported a test-storage error after reporting
   154 passes, so the projects were verified separately.
 - Loopback tests cover transport serialization, initialization failure, blocked
@@ -220,3 +221,5 @@ they do not replace controller interlocks or other machine-safety mechanisms.
   boundaries without sending invalid requests.
 - A saturated loopback listener exercises TCP connect timeout, cleanup,
   reconnect and zero-timeout disconnect on all three test targets.
+- HTTP loopback tests cover independent endpoints, calls without SRTP,
+  per-robot cookie isolation and disconnect during an active HTTP request.

@@ -126,14 +126,14 @@ namespace Fanuc.RobotInterface
         /// overall handshake deadline; hostname resolution may continue after a
         /// timeout on older targets.
         /// </summary>
-        public Task ConnectAsync(string host, ushort port = RobotIF.DEFAULT_PORT, int timeout = RobotIF.DEFAULT_TIMEOUT)
+        public Task ConnectAsync(int timeout = RobotIF.DEFAULT_TIMEOUT)
         {
             lock (_LifecycleLock)
             {
                 if (_Session != null)
                 {
                     if (_Session.Stopping)
-                        return ConnectAfterStopAsync(_Session, host, port, timeout, _ConnectVersion);
+                        return ConnectAfterStopAsync(_Session, timeout, _ConnectVersion);
                     if (!_Session.Ready && TaskScheduler.Current == _Session.Scheduler)
                         return Task.FromException(new InvalidOperationException("Cannot connect from initialization."));
                     return _Session.ConnectTask;
@@ -145,13 +145,13 @@ namespace Fanuc.RobotInterface
                 _Session = session;
                 session.NotifyErrorReset = _LastError != null;
                 _LastError = null;
-                session.Initialization = session.Factory.StartNew(() => Initialize(session, host, port, timeout));
+                session.Initialization = session.Factory.StartNew(() => Initialize(session, timeout));
                 session.ConnectTask = Task.Run(() => CompleteConnectAsync(session));
                 return session.ConnectTask;
             }
         }
 
-        private async Task ConnectAfterStopAsync(Session session, string host, ushort port, int timeout, long version)
+        private async Task ConnectAfterStopAsync(Session session, int timeout, long version)
         {
             await session.Ended.Task.ConfigureAwait(false);
             Task connect;
@@ -159,15 +159,15 @@ namespace Fanuc.RobotInterface
             {
                 if (version != _ConnectVersion)
                     throw new OperationCanceledException("The pending connection was canceled by disconnect.");
-                connect = ConnectAsync(host, port, timeout);
+                connect = ConnectAsync(timeout);
             }
             await connect.ConfigureAwait(false);
         }
 
-        private void Initialize(Session session, string host, ushort port, int timeout)
+        private void Initialize(Session session, int timeout)
         {
             session.Cancellation.Token.ThrowIfCancellationRequested();
-            _Robot.Connect(host, port, timeout);
+            _Robot.Connect(timeout);
             session.Cancellation.Token.ThrowIfCancellationRequested();
             _Robot.WriteCommand("CLRASG");
             AssignmentOffset = 1;
@@ -441,8 +441,14 @@ namespace Fanuc.RobotInterface
         public Task AsyncWriteSNPX(int index, params byte[] values) => _WriteSnapshot(values, snapshot => _Robot.WriteSNPX(index, snapshot));
         public Task AsyncWriteCommand(string command) => _InvokeIfConnected(CaptureReadySession(), () => { _Robot.WriteCommand(command); return true; });
 
-        public Task<string> AsyncExecuteKCL(string command) => _InvokeIfConnected(CaptureReadySession(), () => _Robot.ExecuteKCL(command));
-        public Task<string> AsyncExecuteKarel(string program) => _InvokeIfConnected(CaptureReadySession(), () => _Robot.ExecuteKarel(program));
+        /// <summary>
+        /// Executes a KCL command on a worker thread independently of the SRTP session.
+        /// </summary>
+        public Task<string> AsyncExecuteKCL(string command) => Task.Run(() => _Robot.ExecuteKCL(command));
+        /// <summary>
+        /// Invokes a Karel program on a worker thread independently of the SRTP session.
+        /// </summary>
+        public Task<string> AsyncExecuteKarel(string program) => Task.Run(() => _Robot.ExecuteKarel(program));
 
         private static T[] Snapshot<T>(T[] values) => values == null ? null : (T[])values.Clone();
     }

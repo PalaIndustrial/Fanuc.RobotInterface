@@ -31,10 +31,10 @@ Connect to a controller and read digital input 1:
 ```csharp
 using Fanuc.RobotInterface;
 
-var robot = new RobotIF();
+var robot = new RobotIF("192.168.1.10");
 try
 {
-    robot.Connect("192.168.1.10", 60008, 10000);
+    robot.Connect(timeout: 10000);
     bool input = robot.ReadDI(1, 1)[0];
 }
 finally
@@ -47,7 +47,7 @@ For managed SNPX assignments, use `ExRobotIF`. Holders can be registered before
 or after connecting and retained across reconnects:
 
 ```csharp
-var robot = new ExRobotIF(new RobotIF());
+var robot = new ExRobotIF(new RobotIF("192.168.1.10"));
 robot.R[1].PropertyChanged += (_, e) =>
 {
     if (e.PropertyName == nameof(IValueHolder<float>.Value))
@@ -56,7 +56,7 @@ robot.R[1].PropertyChanged += (_, e) =>
 
 try
 {
-    await robot.ConnectAsync("192.168.1.10", 60008, 10000);
+    await robot.ConnectAsync(timeout: 10000);
     await robot.R[1].WriteAsync(42f);
 }
 finally
@@ -75,7 +75,7 @@ Subscriptions run on the polling thread, so UI consumers must marshal updates
 to their UI thread and avoid blocking callbacks.
 
 `ExRobotIF` waits 10 ms between polling passes by default. To use a longer
-delay, construct it with `new ExRobotIF(new RobotIF(), pollingDelay: 100)`.
+delay, construct it with `new ExRobotIF(new RobotIF("192.168.1.10"), pollingDelay: 100)`.
 The delay is in milliseconds; values below 10 are clamped to 10. It applies
 even when there are no holders, and is not a fixed refresh period.
 
@@ -86,6 +86,18 @@ The async methods schedule synchronous I/O. The connection timeout also applies
 to TCP connect, but is approximate and is not an overall handshake deadline.
 Zero disables the configured timeouts; hostname resolution may continue after
 a timeout on older targets. Caller cancellation is not available.
+
+`RobotIF` is configured for one controller at construction. The optional
+`srtpPort` and `httpPort` parameters default to 60008 and 80, respectively.
+This changes the previous API: pass the host and ports to the constructor rather
+than to `Connect` or `ConnectAsync`. Create another instance for another endpoint.
+`ExecuteKCL` and `ExecuteKarel` use HTTP independently of SRTP and can be called
+before connecting, after a failed connection, or after disconnecting. Their
+availability depends on the controller's HTTP configuration. Their HTTP timeout
+is independent of the SRTP timeout. Each `RobotIF` lazily creates and reuses
+its own HTTP client; its disposal lifecycle remains to be defined.
+The wrapper's async HTTP helpers run on worker threads and do not require or
+depend on an SRTP session; disconnecting SRTP does not cancel them.
 
 Connecting `ExRobotIF` sends `CLRASG` before rebuilding its assignments. The
 effect of that command on other controller clients has not been verified. Give

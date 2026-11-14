@@ -40,7 +40,7 @@ public sealed class LibraryTests
     [TestMethod]
     public void ExtendedSignalDictionaryCreatesAndReusesHolders()
     {
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("localhost"));
 
         var first = robot.SDI[1];
         var again = robot.SDI[1];
@@ -63,9 +63,9 @@ public sealed class LibraryTests
         Assert.IsNotNull(typeof(ExRobotIF).GetConstructor(new[] { typeof(RobotIF) }));
         Assert.IsNotNull(typeof(ExRobotIF).GetConstructor(new[] { typeof(RobotIF), typeof(int) }));
 
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("localhost"));
         Assert.IsFalse(robot.IsConnected);
-        Assert.IsNull(robot.Host);
+        Assert.AreEqual("localhost", robot.Host);
         Assert.ThrowsExactly<ArgumentNullException>(() => new ExRobotIF(null!));
         Assert.ThrowsExactly<ArgumentNullException>(() => new ExRobotIF(null!, 20));
     }
@@ -80,8 +80,8 @@ public sealed class LibraryTests
     [DataRow(int.MaxValue, int.MaxValue)]
     public void ExtendedInterfaceClampsPollingDelay(int requested, int expected)
     {
-        Assert.AreEqual(10, new ExRobotIF(new RobotIF()).PollingDelay);
-        Assert.AreEqual(expected, new ExRobotIF(new RobotIF(), requested).PollingDelay);
+        Assert.AreEqual(10, new ExRobotIF(new RobotIF("localhost")).PollingDelay);
+        Assert.AreEqual(expected, new ExRobotIF(new RobotIF("localhost"), requested).PollingDelay);
     }
 
 #if NET8_0

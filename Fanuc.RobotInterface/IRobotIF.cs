@@ -4,6 +4,8 @@ public interface IRobotIF
 {
     bool IsConnected { get; }
     string Host { get; }
+    ushort SrtpPort { get; }
+    ushort HttpPort { get; }
 
     /// <summary>
     /// Connects using an approximate TCP connect timeout and per-send/receive
@@ -11,10 +13,12 @@ public interface IRobotIF
     /// overall handshake deadline; hostname resolution may continue after a
     /// timeout on older targets.
     /// </summary>
-    void Connect(string host, ushort port, int timeout);
+    void Connect(int timeout = RobotIF.DEFAULT_TIMEOUT);
     void Disconnect();
 
     void ClearAlarm();
+    string ExecuteKCL(string command);
+    string ExecuteKarel(string program);
 
     #region IO
     bool[] ReadDI(int index, ushort count);

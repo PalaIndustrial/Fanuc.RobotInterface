@@ -79,6 +79,41 @@ namespace FANUCRobotTest.UI
                 PRG.CollectionChanged += (s, e) => OnPropertyChanged(nameof(PRG));
                 ALM.CollectionChanged += (s, e) => OnPropertyChanged(nameof(ALM));
             }
+
+            public void RestoreSelections(IExRobotIF robot)
+            {
+                foreach (var i in SDI) robot.SDI.GetOrAdd(i);
+                foreach (var i in SDO) robot.SDO.GetOrAdd(i);
+                foreach (var i in RDI) robot.RDI.GetOrAdd(i);
+                foreach (var i in RDO) robot.RDO.GetOrAdd(i);
+                foreach (var i in UI) robot.UI.GetOrAdd(i);
+                foreach (var i in UO) robot.UO.GetOrAdd(i);
+                foreach (var i in SI) robot.SI.GetOrAdd(i);
+                foreach (var i in SO) robot.SO.GetOrAdd(i);
+                foreach (var i in WI) robot.WI.GetOrAdd(i);
+                foreach (var i in WO) robot.WO.GetOrAdd(i);
+                foreach (var i in WSI) robot.WSI.GetOrAdd(i);
+                foreach (var i in PMC_K) robot.PMC_K.GetOrAdd(i);
+                foreach (var i in PMC_R) robot.PMC_R.GetOrAdd(i);
+
+                foreach (var i in GI) robot.GI.GetOrAdd(i);
+                foreach (var i in GO) robot.GO.GetOrAdd(i);
+                foreach (var i in AI) robot.AI.GetOrAdd(i);
+                foreach (var i in AO) robot.AO.GetOrAdd(i);
+                foreach (var i in PMC_D) robot.PMC_D.GetOrAdd(i);
+
+                foreach (var i in R) robot.R.GetOrAdd(i);
+                foreach (var i in PR) robot.PR.GetOrAdd(i);
+                foreach (var i in SR) robot.SR.GetOrAdd(i);
+
+                foreach (var k in SysVarI) robot.SysVarI.GetOrAdd(k);
+                foreach (var k in SysVarP) robot.SysVarP.GetOrAdd(k);
+                foreach (var k in SysVarS) robot.SysVarS.GetOrAdd(k);
+
+                foreach (var i in POS) robot.POS.GetOrAdd(i);
+                foreach (var i in PRG) robot.PRG.GetOrAdd(i);
+                foreach (var i in ALM) robot.ALM.GetOrAdd(i);
+            }
         }
 
         public SettingsT Settings { get; } = new SettingsT("Settings.RobotDisplayExtended.json");
@@ -93,46 +128,8 @@ namespace FANUCRobotTest.UI
 
         private static void RobotDIsplayExtended_DependencyPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            var control = (RobotDisplayExtended)d;
-            switch (e.Property.Name)
-            {
-                case nameof(Robot):
-                    if (e.NewValue is IExRobotIF new_robot)
-                    {
-                        foreach (var i in control.Settings.SDI) new_robot.SDI.GetOrAdd(i);
-                        foreach (var i in control.Settings.SDO) new_robot.SDO.GetOrAdd(i);
-                        foreach (var i in control.Settings.RDI) new_robot.RDI.GetOrAdd(i);
-                        foreach (var i in control.Settings.RDO) new_robot.RDO.GetOrAdd(i);
-                        foreach (var i in control.Settings.UI) new_robot.UI.GetOrAdd(i);
-                        foreach (var i in control.Settings.UO) new_robot.UO.GetOrAdd(i);
-                        foreach (var i in control.Settings.SI) new_robot.SI.GetOrAdd(i);
-                        foreach (var i in control.Settings.SO) new_robot.SO.GetOrAdd(i);
-                        foreach (var i in control.Settings.WI) new_robot.WI.GetOrAdd(i);
-                        foreach (var i in control.Settings.WO) new_robot.WO.GetOrAdd(i);
-                        foreach (var i in control.Settings.WSI) new_robot.WSI.GetOrAdd(i);
-                        foreach (var i in control.Settings.PMC_K) new_robot.PMC_K.GetOrAdd(i);
-                        foreach (var i in control.Settings.PMC_R) new_robot.PMC_R.GetOrAdd(i);
-
-                        foreach (var i in control.Settings.GI) new_robot.GI.GetOrAdd(i);
-                        foreach (var i in control.Settings.GO) new_robot.GO.GetOrAdd(i);
-                        foreach (var i in control.Settings.AI) new_robot.AI.GetOrAdd(i);
-                        foreach (var i in control.Settings.AO) new_robot.AO.GetOrAdd(i);
-                        foreach (var i in control.Settings.PMC_D) new_robot.PMC_D.GetOrAdd(i);
-
-                        foreach (var i in control.Settings.R) new_robot.R.GetOrAdd(i);
-                        foreach (var i in control.Settings.PR) new_robot.PR.GetOrAdd(i);
-                        foreach (var i in control.Settings.SR) new_robot.SR.GetOrAdd(i);
-
-                        foreach (var k in control.Settings.SysVarI) new_robot.SysVarI.GetOrAdd(k);
-                        foreach (var k in control.Settings.SysVarP) new_robot.SysVarP.GetOrAdd(k);
-                        foreach (var k in control.Settings.SysVarS) new_robot.SysVarS.GetOrAdd(k);
-
-                        foreach (var i in control.Settings.POS) new_robot.POS.GetOrAdd(i);
-                        foreach (var i in control.Settings.PRG) new_robot.PRG.GetOrAdd(i);
-                        foreach (var i in control.Settings.ALM) new_robot.ALM.GetOrAdd(i);
-                    }
-                    break;
-            }
+            if (e.NewValue is IExRobotIF robot)
+                ((RobotDisplayExtended)d).Settings.RestoreSelections(robot);
         }
 
         public RobotDisplayExtended()

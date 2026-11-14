@@ -30,11 +30,11 @@ public sealed class ExRobotIFLifecycleTests
             secondPoll.TrySetResult(true);
             ExpectClosed(socket);
         });
-        var robot = new ExRobotIF(new RobotIF(), 1000);
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port), 1000);
         _ = robot.R[1];
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(secondPoll.Task);
         }
         finally
@@ -66,11 +66,11 @@ public sealed class ExRobotIFLifecycleTests
             initialized.TrySetResult(true);
             ExpectClosed(socket);
         });
-        var robot = new ExRobotIF(new RobotIF(), 60000);
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port), 60000);
         if (withHolder) _ = robot.R[1];
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(initialized.Task);
             await Task.Delay(100);
             await Bounded(Task.Run(robot.Disconnect));
@@ -107,13 +107,13 @@ public sealed class ExRobotIFLifecycleTests
             poll.TrySetResult(true);
             ExpectClosed(socket);
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         _ = robot.R[1];
         try
         {
-            await ExpectFault(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await ExpectFault(robot.ConnectAsync(TimeoutMs));
             Assert.IsFalse(robot.IsConnected);
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             Assert.IsTrue(robot.IsConnected);
             await Bounded(poll.Task);
         }
@@ -136,13 +136,13 @@ public sealed class ExRobotIFLifecycleTests
             Command(socket, "CLRASG", false);
             ExpectClosed(socket);
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         IExRobotIF api = robot;
         var notifications = new ConcurrentQueue<string?>();
         robot.PropertyChanged += (_, e) => notifications.Enqueue(e.PropertyName);
         try
         {
-            await ExpectFault(api.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await ExpectFault(api.ConnectAsync(TimeoutMs));
             Assert.IsFalse(api.IsConnected);
             Assert.IsNotNull(api.LastError);
             StringAssert.Contains(api.LastError.ToString(), "Write");
@@ -165,14 +165,14 @@ public sealed class ExRobotIFLifecycleTests
         var firstPoll = Signal();
         var secondPoll = Signal();
         using var server = new Controller(socket => Session(socket, firstPoll), socket => Session(socket, secondPoll));
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         _ = robot.R[1];
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(firstPoll.Task);
             await Bounded(Task.Run(robot.Disconnect));
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(secondPoll.Task);
         }
         finally
@@ -197,16 +197,16 @@ public sealed class ExRobotIFLifecycleTests
             initializing.TrySetResult(true);
             ExpectClosed(socket);
         }, socket => Session(socket, poll));
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         _ = robot.R[1];
         try
         {
-            var connecting = robot.ConnectAsync("127.0.0.1", server.Port, 30000);
+            var connecting = robot.ConnectAsync(30000);
             await Bounded(initializing.Task);
             await Bounded(Task.Run(robot.Disconnect));
             await ExpectUnsuccessful(connecting);
             Assert.IsFalse(robot.IsConnected);
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(poll.Task);
         }
         finally
@@ -252,11 +252,11 @@ public sealed class ExRobotIFLifecycleTests
             nextPoll.TrySetResult(true);
             ExpectClosed(socket);
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         var holder = robot.R[1];
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(poll.Task);
             var pending = holder.WriteAsync(42f);
             releasePoll.Set();
@@ -309,11 +309,11 @@ public sealed class ExRobotIFLifecycleTests
             finalPoll.TrySetResult(true);
             ExpectClosed(socket);
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         var holder = robot.R[1];
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(initialPoll.Task);
             var first = holder.WriteAsync(11f);
             releasePoll.Set();
@@ -381,12 +381,12 @@ public sealed class ExRobotIFLifecycleTests
             nextPoll.TrySetResult(true);
             ExpectClosed(socket);
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         var holder = robot.PR[1];
         var position = new Position { Joint = new PositionJoint { J1 = 12.5f, J9 = -8.25f } };
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(poll.Task);
             var pending = holder.WriteAsync(position);
             Assert.IsFalse(pending.IsCompleted, "Write should be queued behind the blocked poll.");
@@ -431,7 +431,7 @@ public sealed class ExRobotIFLifecycleTests
             ExpectShortWrite(socket, SegmentSelector.WORD_R, new byte[] { 1, 2, 3, 4 });
             ExpectClosed(socket);
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         var di = new[] { true, false, true, false, false, false, false, false };
         var output = new[] { false, true, false, true, false, false, false, true };
         var gi = new ushort[] { 0x1234, 0xabcd };
@@ -439,7 +439,7 @@ public sealed class ExRobotIFLifecycleTests
         var snpx = new byte[] { 1, 2, 3, 4 };
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             var read = robot.AsyncReadDI(1, 1);
             await Bounded(blockedRead.Task);
             var writes = new[]
@@ -511,17 +511,17 @@ public sealed class ExRobotIFLifecycleTests
                     Respond(socket);
             }
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         var holder = robot.R[1];
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(poll.Task);
             var pending = holder.WriteAsync(42f);
             releasePoll.Set();
             await ExpectFault(pending);
             await Bounded(Task.Run(robot.Disconnect));
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(reconnectedPoll.Task);
         }
         finally
@@ -552,18 +552,18 @@ public sealed class ExRobotIFLifecycleTests
             InitializeRegister(socket);
             ObservePollsWithoutWrites(socket, reconnectedPoll);
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         var holder = robot.R[1];
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(poll.Task);
             var pending = holder.WriteAsync(42f);
             Assert.IsFalse(pending.IsCompleted);
             await Bounded(Task.Run(robot.Disconnect));
             await ExpectUnsuccessful(pending);
             Assert.IsTrue(pending.IsCanceled, "A queued write interrupted by disconnect should be canceled.");
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(reconnectedPoll.Task);
         }
         finally
@@ -587,11 +587,11 @@ public sealed class ExRobotIFLifecycleTests
             poll.TrySetResult(true);
             ExpectClosed(socket);
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         _ = robot.R[1];
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, 30000));
+            await Bounded(robot.ConnectAsync(30000));
             await Bounded(poll.Task);
             await Bounded(Task.Run(robot.Disconnect));
             Assert.IsFalse(robot.IsConnected);
@@ -634,7 +634,7 @@ public sealed class ExRobotIFLifecycleTests
             nextPoll.TrySetResult(true);
             ExpectClosed(socket);
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         var holder = robot.SDI[1];
         var called = 0;
         holder.PropertyChanged += (_, e) =>
@@ -646,11 +646,11 @@ public sealed class ExRobotIFLifecycleTests
                 robot.Disconnect();
                 try
                 {
-                    robot.Connect("127.0.0.1", server.Port, TimeoutMs);
+                    robot.Connect(TimeoutMs);
                     syncError.TrySetResult(null);
                 }
                 catch (Exception ex) { syncError.TrySetResult(ex); }
-                reconnect.TrySetResult(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+                reconnect.TrySetResult(robot.ConnectAsync(TimeoutMs));
                 Wait(releaseWatcher);
             }
             catch (Exception ex)
@@ -661,7 +661,7 @@ public sealed class ExRobotIFLifecycleTests
         };
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             var reconnecting = await Bounded(reconnect.Task);
             Assert.IsInstanceOfType<InvalidOperationException>(await Bounded(syncError.Task));
             Assert.IsFalse(reconnecting.IsCompleted);
@@ -693,10 +693,10 @@ public sealed class ExRobotIFLifecycleTests
             Command(socket, "SETASG 1 65536 R[1] 0");
             ExpectClosed(socket);
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await ExpectFault(robot.AsyncWriteAssignment(0, "R[1] 0"));
             await ExpectFault(robot.AsyncWriteAssignment(-1, "R[1] 0"));
             Assert.AreEqual(1, await Bounded(robot.AsyncWriteAssignment(65536, "R[1] 0")));
@@ -745,10 +745,10 @@ public sealed class ExRobotIFLifecycleTests
             pollAfterWrite.TrySetResult(true);
             ExpectClosed(socket);
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             var read = robot.AsyncReadDI(1, 1);
             await Bounded(blockedRead.Task);
             var holder = robot.R[1];
@@ -803,11 +803,11 @@ public sealed class ExRobotIFLifecycleTests
             InitializeRegister(socket);
             ObservePollsWithoutWrites(socket, reconnectedPoll, includeDigitalInput: true);
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         _ = robot.SDI[1];
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(blockedRead.Task);
             var holder = robot.R[1];
             var pending = holder.WriteAsync(42f);
@@ -816,7 +816,7 @@ public sealed class ExRobotIFLifecycleTests
             await Until(() => !robot.IsConnected && robot.LastError != null);
             StringAssert.Contains(robot.LastError.ToString(), "Write");
             await Bounded(firstClosed.Task);
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(reconnectedPoll.Task);
         }
         finally
@@ -845,7 +845,7 @@ public sealed class ExRobotIFLifecycleTests
             socket.Shutdown(SocketShutdown.Send);
             ExpectClosed(socket);
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         IExRobotIF api = robot;
         _ = robot.R[1];
         var notifications = new ConcurrentQueue<bool>();
@@ -859,7 +859,7 @@ public sealed class ExRobotIFLifecycleTests
         };
         try
         {
-            await Bounded(robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs));
+            await Bounded(robot.ConnectAsync(TimeoutMs));
             await Bounded(poll.Task);
             release.Set();
             await Until(() => !api.IsConnected && api.LastError != null && notifications.Contains(false) && !errors.IsEmpty);
@@ -897,12 +897,12 @@ public sealed class ExRobotIFLifecycleTests
             Command(socket, "CLRASG");
             ExpectClosed(socket);
         });
-        var robot = new ExRobotIF(new RobotIF());
+        var robot = new ExRobotIF(new RobotIF("127.0.0.1", server.Port));
         try
         {
-            var first = robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs);
+            var first = robot.ConnectAsync(TimeoutMs);
             await Bounded(entered.Task);
-            var second = robot.ConnectAsync("127.0.0.1", server.Port, TimeoutMs);
+            var second = robot.ConnectAsync(TimeoutMs);
             release.Set();
             await Bounded(first);
             try { await Bounded(second); }

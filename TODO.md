@@ -25,8 +25,7 @@ is still needed. `FANUCRobotTest` remains an interactive application.
   watcher before reconnecting. Loopback tests cover blocked polling, reconnect,
   and watcher-initiated disconnect. A universal shutdown bound is not established:
   timeouts can be disabled, hostname resolution may continue on older targets,
-  HTTP calls and user callbacks may block, and real-controller behavior remains
-  untested.
+  user callbacks may block, and real-controller behavior remains untested.
 
 ## HIGH
 
@@ -81,11 +80,10 @@ is still needed. `FANUCRobotTest` remains an interactive application.
   Update `FANUCRobotTest\UI\MainWindow.xaml.cs` to await lifecycle operations,
   prevent conflicting button actions, and display failures without freezing the
   UI. Coordinate window-close behavior with T03 and T10.
-- [ ] **[MIDIUM] T15 - Define HTTP host, timeout and disconnected-call behavior.**
-  Decide and document whether direct KCL/Karel helpers may target a remembered
-  host after SRTP disconnect. Provide explicit HTTP timeout/cancellation behavior,
-  independent of TCP I/O settings, and keep direct and wrapper APIs intentional.
-  Preserve existing behavior unless a deliberate compatibility change is made.
+- [ ] **[MIDIUM] T15 - Define HTTP timeout, cancellation and client lifetime.**
+  Host and HTTP port are configured independently of SRTP, and KCL/Karel calls
+  work without an SRTP session. Define disposal of each robot's lazy HTTP client
+  and explicit HTTP timeout/cancellation behavior independently of TCP I/O.
 
 ## LOW
 

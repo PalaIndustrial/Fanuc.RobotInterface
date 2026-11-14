@@ -19,10 +19,10 @@
             <!-- Other app resources here -->
             <converters:BooleanToObjectConverter
                 x:Key="BooleanToVisibleHiddenConverter"
-                TrueValue="{x:Static Visibility.Visible}" FalseValue="{x:Static Visibility.Hidden}" NullValue="{x:Static Visibility.Visible}" />
+                TrueValue="{x:Static Visibility.Visible}" FalseValue="{x:Static Visibility.Hidden}" NullValue="{x:Static Visibility.Hidden}" />
             <converters:BooleanToObjectConverter
                 x:Key="BooleanToHiddenVisibleConverter" 
-                TrueValue="{x:Static Visibility.Hidden}" FalseValue="{x:Static Visibility.Visible}" NullValue="{x:Static Visibility.Hidden}" />
+                TrueValue="{x:Static Visibility.Hidden}" FalseValue="{x:Static Visibility.Visible}" NullValue="{x:Static Visibility.Visible}" />
             <converters:BooleanInvertConverter x:Key="BooleanInvertConverter" />
         </ResourceDictionary>
     </Application.Resources>

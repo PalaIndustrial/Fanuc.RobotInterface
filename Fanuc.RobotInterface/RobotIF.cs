@@ -14,7 +14,31 @@ namespace Fanuc.RobotInterface
     public partial class RobotIF : IRobotIF, INotifyPropertyChanged
     {
         public const int DEFAULT_PORT = 60008;
+        public const int DEFAULT_HTTP_PORT = 80;
         public const int DEFAULT_TIMEOUT = 10000;
+
+        /// <summary>
+        /// Configures the controller host and its independent SRTP and HTTP ports.
+        /// HTTP helpers can be used without connecting SRTP.
+        /// </summary>
+        public RobotIF(string host, ushort srtpPort = DEFAULT_PORT, ushort httpPort = DEFAULT_HTTP_PORT)
+        {
+            if (host == null)
+                throw new ArgumentNullException(nameof(host));
+            if (string.IsNullOrWhiteSpace(host))
+                throw new ArgumentException("A controller host is required.", nameof(host));
+            if (srtpPort == 0)
+                throw new ArgumentOutOfRangeException(nameof(srtpPort));
+            if (httpPort == 0)
+                throw new ArgumentOutOfRangeException(nameof(httpPort));
+            Host = host;
+            SrtpPort = srtpPort;
+            HttpPort = httpPort;
+        }
+
+        public string Host { get; }
+        public ushort SrtpPort { get; }
+        public ushort HttpPort { get; }
 
         // Disconnect does not take OperationLock, so it can interrupt blocked I/O.
         private readonly object OperationLock = new object();
@@ -35,15 +59,6 @@ namespace Fanuc.RobotInterface
         }
 
         private byte SequenceNumber;
-        private string Host;
-        string IRobotIF.Host
-        {
-            get
-            {
-                lock (StateLock)
-                    return Host;
-            }
-        }
 
         /// <summary>
         /// Connects to the controller using the timeout in milliseconds for TCP
@@ -51,7 +66,7 @@ namespace Fanuc.RobotInterface
         /// The timeout is approximate and is not an overall handshake deadline;
         /// hostname resolution may continue after a timeout on older targets.
         /// </summary>
-        public void Connect(string host, ushort port, int timeout)
+        public void Connect(int timeout = DEFAULT_TIMEOUT)
         {
             long version;
             lock (StateLock)
@@ -85,7 +100,7 @@ namespace Fanuc.RobotInterface
                     client.ReceiveTimeout = timeout;
                     client.SendTimeout = timeout;
                     client.Client.NoDelay = true;
-                    ConnectWithTimeout(client, host, port, timeout);
+                    ConnectWithTimeout(client, Host, SrtpPort, timeout);
 
                     SequenceNumber = 0;
 
@@ -128,7 +143,6 @@ namespace Fanuc.RobotInterface
                     {
                         if (version != ConnectionVersion || TcpClient != client)
                             throw new IOException("Connection was cancelled.");
-                        Host = host;
                         ConnectionReady = true;
                     }
                 }
@@ -144,7 +158,7 @@ namespace Fanuc.RobotInterface
                         }
                     }
                     DisposeClient(client);
-                    throw new IOException($"Connecting to {host}:{port} failed.", ex);
+                    throw new IOException($"Connecting to {Host}:{SrtpPort} failed.", ex);
                 }
             }
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsConnected)));

@@ -45,7 +45,7 @@ namespace Fanuc.RobotInterface
         /// overall handshake deadline; hostname resolution may continue after a
         /// timeout on older targets.
         /// </summary>
-        Task ConnectAsync(string host, ushort port, int timeout);
+        Task ConnectAsync(int timeout = RobotIF.DEFAULT_TIMEOUT);
 
         Task<bool[]> AsyncReadDI(int index, ushort count);
         Task<bool[]> AsyncReadDO(int index, ushort count);
@@ -61,5 +61,7 @@ namespace Fanuc.RobotInterface
         Task AsyncWriteCommand(string command);
 
         Task<int> AsyncWriteAssignment(int length, string target);
+        Task<string> AsyncExecuteKCL(string command);
+        Task<string> AsyncExecuteKarel(string program);
     }
 }
