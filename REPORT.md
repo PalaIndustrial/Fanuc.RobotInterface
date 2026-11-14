@@ -29,6 +29,9 @@ controller command, or UI binding.
   producing library version `3.0.4.0`. README and migration documentation use
   the release label `3.0.4`; that label alone does not identify this source state.
 - The solution is `Fanuc.RobotInterface.slnx`.
+- Library packages include XML documentation for each target; existing API
+  coverage is partial. `CommunityToolkit.Mvvm` is a desktop-app dependency,
+  not an Extensions-library dependency.
 - Extended interface types retain the `Fanuc.RobotInterface` namespace despite
   moving to the Extensions assembly. SRTP types use `Fanuc.SRTP`.
 - `RobotIF` is constructed with an immutable host and independent SRTP and HTTP

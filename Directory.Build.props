@@ -18,6 +18,9 @@
 		<AssemblyVersion>$(Version)</AssemblyVersion>
 		<FileVersion>$(Version)</FileVersion>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<GenerateDocumentationFile>True</GenerateDocumentationFile>
+		<!-- Existing public APIs are not fully documented yet. -->
+		<NoWarn>$(NoWarn);1591</NoWarn>
 
 		<SignAssembly>True</SignAssembly>
 		<AssemblyOriginatorKeyFile>C:\Users\Palatis\.dotnet\Palatis.snk</AssemblyOriginatorKeyFile>
