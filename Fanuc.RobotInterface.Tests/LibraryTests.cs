@@ -32,6 +32,51 @@ public sealed class LibraryTests
     }
 
     [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public void ExtendedRequestSeparatesCountFromPayloadLength(bool payloadFirst)
+    {
+        var packet = new ExtendedRequestPacket();
+        var payload = new byte[] { 1, 2, 3, 4 };
+        if (payloadFirst)
+        {
+            packet.ExtraPayload = payload;
+            packet.Count = 2;
+        }
+        else
+        {
+            packet.Count = 2;
+            packet.ExtraPayload = payload;
+        }
+
+        var bytes = packet.GetBytes();
+        Assert.AreEqual((ushort)2, packet.Count);
+        Assert.AreEqual(payload.Length, PacketBase.ExtraLengthFromHeaderBuffer(bytes));
+        Assert.AreEqual((byte)2, bytes[54]);
+        Assert.AreEqual((byte)0, bytes[55]);
+        CollectionAssert.AreEqual(payload, bytes.Skip(PacketBase.HEADER_LENGTH).ToArray());
+    }
+
+    [TestMethod]
+    public void ExtraPayloadRejectsOverflowWithoutChangingPacket()
+    {
+        var packet = new ExtendedRequestPacket { Count = 2 };
+        Assert.HasCount(PacketBase.HEADER_LENGTH, packet.GetBytes());
+        var maximum = new byte[ushort.MaxValue];
+        packet.ExtraPayload = maximum;
+        Assert.AreEqual((int)ushort.MaxValue, PacketBase.ExtraLengthFromHeaderBuffer(packet.GetBytes()));
+
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => packet.ExtraPayload = new byte[ushort.MaxValue + 1]);
+        Assert.AreSame(maximum, packet.ExtraPayload);
+        Assert.AreEqual((ushort)2, packet.Count);
+        Assert.AreEqual((int)ushort.MaxValue, PacketBase.ExtraLengthFromHeaderBuffer(packet.GetBytes()));
+
+        packet.ExtraPayload = null!;
+        Assert.HasCount(PacketBase.HEADER_LENGTH, packet.GetBytes());
+        Assert.AreEqual(0, PacketBase.ExtraLengthFromHeaderBuffer(packet.Header));
+    }
+
+    [TestMethod]
     public void PositionParserRejectsIncompleteData()
     {
         Assert.ThrowsExactly<ArgumentException>(() => PositionConverter.ToPosition(new byte[99]));

@@ -1,4 +1,6 @@
-﻿namespace Fanuc.SRTP;
+﻿using System;
+
+namespace Fanuc.SRTP;
 
 public abstract class PacketBase(byte[] buffer = null)
 {
@@ -60,14 +62,17 @@ public abstract class PacketBase(byte[] buffer = null)
 
     public byte SequenceNumber { get => _SequenceNumber; set => _SequenceNumber = _SequenceNumber2 = value; }
 
-    private byte[] _ExtraPayload;
+    private byte[] _ExtraPayload = [];
     public virtual byte[] ExtraPayload
     {
         get => _ExtraPayload;
         set
         {
+            if (value?.Length > ushort.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(value), "The extra payload cannot exceed 65535 bytes.");
+
             _ExtraPayload = value ?? [];
-            ExtraLength = (ushort)(value?.Length ?? 0);
+            ExtraLength = (ushort)_ExtraPayload.Length;
         }
     }
 
