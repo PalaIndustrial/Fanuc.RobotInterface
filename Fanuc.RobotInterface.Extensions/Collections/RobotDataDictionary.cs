@@ -39,12 +39,12 @@ internal class RobotDataDictionary<TKey, TValue> : IRobotDataDictionary<TKey, TV
     public bool TryGetValue(TKey key, out TValue value) => _Items.TryGetValue(key, out value);
     public TValue GetOrAdd(TKey key)
     {
-        if (_Items.ContainsKey(key))
-            return _Items[key];
+        if (_Items.TryGetValue(key, out var value))
+            return value;
         lock (_Items)
         {
-            if (_Items.ContainsKey(key))
-                return _Items[key];
+            if (_Items.TryGetValue(key, out value))
+                return value;
 
             var v = CreateValue(key);
             _Items[key] = v;

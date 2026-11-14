@@ -56,6 +56,42 @@ public sealed class LibraryTests
     }
 
     [TestMethod]
+    public void ConcurrentHolderCreationReusesOneInstance()
+    {
+        var holders = new ExRobotIF(new RobotIF("localhost")).SDI;
+        var results = new object[64];
+
+        Parallel.For(0, results.Length, i => results[i] = holders.GetOrAdd(1));
+
+        foreach (var holder in results)
+            Assert.AreSame(results[0], holder);
+    }
+
+    [TestMethod]
+    public void HolderLookupsTolerateConcurrentRemovalAndClear()
+    {
+        var holders = new ExRobotIF(new RobotIF("localhost")).SDI;
+        holders.GetOrAdd(1);
+
+        Parallel.Invoke(
+            () =>
+            {
+                for (var i = 0; i < 20000; i++)
+                    Assert.AreEqual(1, holders.GetOrAdd(1).Index);
+            },
+            () =>
+            {
+                for (var i = 0; i < 20000; i++)
+                {
+                    if (i % 2 == 0)
+                        holders.Remove(1);
+                    else
+                        holders.Clear();
+                }
+            });
+    }
+
+    [TestMethod]
     public void ExtendedInterfaceRequiresRobotIF()
     {
         var constructors = typeof(ExRobotIF).GetConstructors();
