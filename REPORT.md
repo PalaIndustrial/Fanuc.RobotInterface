@@ -25,9 +25,9 @@ controller command, or UI binding.
 | `Fanuc.RobotInterface.Extensions` | `IExRobotIF`, `ExRobotIF`, signal/data holders, dictionaries and scheduler | `net48`, `netstandard2.0`, `net10.0` |
 | `FANUCRobotTest` | Interactive WPF application using `RobotIF` | `net10.0-windows10.0.18362.0` |
 
-- `Directory.Build.props` sets shared version `3.0.4` and library revision `0`,
-  producing library version `3.0.4.0`. README and migration documentation use
-  the release label `3.0.4`; that label alone does not identify this source state.
+- `Directory.Build.props` sets shared version `3.0.5` and library revision `0`,
+  producing library version `3.0.5.0`. The README uses the release label
+  `3.0.5`; that label alone does not identify this source state.
 - The solution is `Fanuc.RobotInterface.slnx`.
 - Library packages include XML documentation for each target; existing API
   coverage is partial. `CommunityToolkit.Mvvm` is a desktop-app dependency,

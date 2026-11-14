@@ -1,6 +1,6 @@
 <Project>
 	<PropertyGroup>
-		<SharedVersion>3.0.4</SharedVersion>
+		<SharedVersion>3.0.5</SharedVersion>
 		<LibraryRevision Condition="'$(MSBuildProjectName)' == 'Fanuc.SRTP'">0</LibraryRevision>
 		<LibraryRevision Condition="'$(MSBuildProjectName)' == 'Fanuc.RobotInterface'">0</LibraryRevision>
 		<LibraryRevision Condition="'$(MSBuildProjectName)' == 'Fanuc.RobotInterface.Extensions'">0</LibraryRevision>

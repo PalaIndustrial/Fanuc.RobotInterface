@@ -1,6 +1,6 @@
 # FANUC.RobotInterface
 
-v3.0.4
+v3.0.5
 
 # Overview
 
