@@ -76,10 +76,6 @@ is still needed. `FANUCRobotTest` remains an interactive application.
   Reset `AssignmentOffset` after successful `CLRASG`, rebuild holder assignments,
   and reject allocations beyond the supported range. Verify repeated reconnects
   do not keep increasing offsets and that an exhausted allocation fails clearly.
-- [ ] **[MIDIUM] T14 - Keep desktop connection and shutdown work off the UI thread.**
-  Update `FANUCRobotTest\UI\MainWindow.xaml.cs` to await lifecycle operations,
-  prevent conflicting button actions, and display failures without freezing the
-  UI. Coordinate window-close behavior with T03 and T10.
 - [ ] **[MIDIUM] T15 - Define HTTP timeout, cancellation and client lifetime.**
   Host and HTTP port are configured independently of SRTP, and KCL/Karel calls
   work without an SRTP session. Define disposal of each robot's lazy HTTP client
@@ -87,6 +83,10 @@ is still needed. `FANUCRobotTest` remains an interactive application.
 
 ## LOW
 
+- [ ] **[LOW] T14 - Keep desktop connection and shutdown work off the UI thread.**
+  Update `FANUCRobotTest\UI\MainWindow.xaml.cs` to await lifecycle operations,
+  prevent conflicting button actions, and display failures without freezing the
+  UI. Coordinate window-close behavior with T03 and T10.
 - [ ] **[LOW] T16 - Resolve the public `Refresh` and `Refresh2` placeholders.**
   Decide whether to implement, deprecate, or document these unsupported methods;
   both currently throw `NotImplementedException` and are outside `IRobotIF`.
