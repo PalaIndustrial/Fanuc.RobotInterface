@@ -644,7 +644,7 @@ namespace Fanuc.RobotInterface
 
             // TODO: validate received packet
             if (rr.MessageType == MessageType.SHORT_FAILED)
-                throw new IOException($"Write {SegmentSelector.BYTE_G} error! Wrong data received, check your request.");
+                throw new IOException($"Write {SegmentSelector.WORD_R} error! Wrong data received, check your request.");
         }
 
         public byte[] ReadSNPX(int index, ushort count)

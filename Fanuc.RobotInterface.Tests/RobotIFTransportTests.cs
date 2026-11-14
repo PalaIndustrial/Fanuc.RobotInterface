@@ -267,6 +267,36 @@ public sealed class RobotIFTransportTests
     }
 
     [TestMethod]
+    [DataRow(2)]
+    [DataRow(8)]
+    public void FailedSNPXWriteReportsWordRegisterSelector(int length)
+    {
+        using var server = new TestServer(socket =>
+        {
+            Handshake(socket);
+            var request = ReadRequest(socket);
+            var extended = length > 6;
+            Assert.AreEqual((byte)(extended ? MessageType.LONG : MessageType.SHORT), request[31]);
+            Assert.AreEqual((byte)SegmentSelector.WORD_R, request[extended ? 51 : 43]);
+            var response = ResponseHeader();
+            response[31] = (byte)MessageType.SHORT_FAILED;
+            SendAll(socket, response);
+        });
+        var robot = new RobotIF("127.0.0.1", server.Port);
+        try
+        {
+            robot.Connect(3000);
+            var error = Assert.ThrowsExactly<IOException>(() => robot.WriteSNPX(1, new byte[length]));
+            StringAssert.Contains(error.Message, "Write WORD_R error!");
+            server.Complete();
+        }
+        finally
+        {
+            robot.Disconnect();
+        }
+    }
+
+    [TestMethod]
     [DataRow(0)]
     [DataRow(13)]
     public void TruncatedHeaderFailsWithEndOfStream(int bytesToSend)
