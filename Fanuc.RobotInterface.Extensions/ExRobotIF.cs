@@ -103,6 +103,12 @@ namespace Fanuc.RobotInterface
             ALM = new RobotDataDictionary<int, RobotDataHolderBase<RobotAlarm>>(index => new RobotAlarmHolder(this, Math.Abs(index), index < 0));
         }
 
+        /// <summary>
+        /// Connects using an approximate TCP connect timeout and per-send/receive
+        /// timeout in milliseconds. Zero disables these timeouts. This is not an
+        /// overall handshake deadline; hostname resolution may continue after a
+        /// timeout on older targets.
+        /// </summary>
         public Task ConnectAsync(string host, ushort port = RobotIF.DEFAULT_PORT, int timeout = RobotIF.DEFAULT_TIMEOUT)
         {
             lock (_LifecycleLock)

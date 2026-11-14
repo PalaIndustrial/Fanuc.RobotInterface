@@ -17,6 +17,7 @@ namespace Fanuc.RobotInterface
         }
         public string Host => ((IRobotIF)_Robot).Host;
 
+        /// <inheritdoc />
         public void Connect(string host, ushort port = RobotIF.DEFAULT_PORT, int timeout = RobotIF.DEFAULT_TIMEOUT)
         {
             lock (_LifecycleLock)

@@ -57,19 +57,20 @@ Source: `Fanuc.RobotInterface\RobotIF.cs`, especially `Connect`, `Disconnect`,
 `SendInternal`, `ReceiveInternal`, and `SendReceiveInternal`.
 
 1. `Connect` serializes connection attempts with complete protocol operations.
-   It publishes the new client for interruption, configures it, then calls
-   synchronous `TcpClient.Connect(host, port)`.
+   It publishes the new client for interruption, configures it, then waits for
+   an asynchronous TCP connection using the supplied timeout.
 2. It resets the sequence number and exchanges `INIT` and `UNKNOWN_8` packets.
 3. It rejects `SHORT_FAILED` responses but does not comprehensively validate
    response identity or expected payload shape.
 4. On failure it disposes the client and wraps the error in an `IOException`.
    Successful completion raises `IsConnected` notification.
 
-The default port is 60008 and the default I/O timeout is 10,000 ms.
-The timeout configures synchronous socket send/receive operations, including
-those used for the SRTP handshake. It does **not** configure the TCP connect
-deadline or an overall handshake deadline. Zero permits unbounded socket I/O;
-invalid timeout values may fail during socket configuration.
+The default port is 60008 and the default timeout is 10,000 ms. It applies
+approximately to TCP connect and to each socket send/receive, including the
+SRTP handshake. It is not an overall handshake deadline. Zero disables the
+configured timeouts; operating-system limits can still apply. On older targets,
+hostname resolution may continue after a timed-out client has been closed.
+Invalid timeout values may fail during socket configuration.
 
 `IsConnected` requires a completed handshake and reads `TcpClient.Connected`;
 it is not a heartbeat or a guarantee that the next operation will succeed.
@@ -107,7 +108,7 @@ Sources: `Fanuc.RobotInterface.Extensions\ExRobotIF.cs`,
   nonblocking socket APIs.
 
 Socket closure interrupts active transport I/O, but a blocked user callback,
-HTTP operation or TCP connect without a deadline can delay shutdown. Callers
+HTTP operation or a connection with disabled timeouts can delay shutdown. Callers
 cannot supply their own cancellation token. Dropping a returned task does not
 cancel it.
 
@@ -160,7 +161,7 @@ the triggering conditions, not observed production incidents.
 
 | ID | Priority | Finding and consequence | Source |
 |---|---|---|---|
-| F5 | High | Socket I/O can be interrupted and watcher overlap is prevented, but shutdown has no universal bound while TCP connect, an HTTP operation or a consumer callback remains blocked. | `ExRobotIF.cs`: `FinishStop`; `RobotIF.cs`: `Connect` |
+| F5 | High | Socket I/O can be interrupted and watcher overlap is prevented, but shutdown has no universal bound when timeouts are disabled or an HTTP operation or consumer callback remains blocked. | `ExRobotIF.cs`: `FinishStop`; `RobotIF.cs`: `Connect` |
 | F11 | Medium | Reads validate ACK format and minimum payload length, but fixed six-byte short payloads can contain indistinguishable padding. Handshake and write ACK types are not validated, and response identity and other fields are not correlated with requests; their semantics require investigation. | `RobotIF.cs`: handshake and read/write methods |
 | F13 | Medium | The background watcher now has a fixed 10 ms inter-pass wait, but idle CPU and active refresh cadence have not been separately measured or made configurable. | `ExRobotIF.cs`: `Watch` |
 
@@ -175,8 +176,8 @@ per-write tasks; a loopback test covers consecutive writes and their responses.
 
 - This is a working-tree assessment, not an asserted comparison against tagged
   source. API migration details belong to `CHANGELOG.md` and `MIGRATION.md`.
-- The connect timeout is not a TCP connect timeout; socket I/O timeouts do apply
-  to the SRTP handshake's send/receive operations.
+- The timeout applies to TCP connect as well as socket I/O, but not to the
+  handshake as a whole.
 - Handshake responses are received and checked for `SHORT_FAILED`. The missing
   piece is comprehensive validation, not the absence of all response checks.
 - Built-in holders route normal reads and writes through the wrapper's task
@@ -190,9 +191,8 @@ per-write tasks; a loopback test covers consecutive writes and their responses.
 
 1. **Transport correctness:** add deterministic partial-send coverage and
    investigate response identity before rejecting unverified field patterns.
-2. **Cancellation and shutdown:** implement actual connect and handshake
-   deadlines and caller cancellation, and verify shutdown limits. A deadline must
-   interrupt the underlying operation, not merely stop waiting for its task.
+2. **Shutdown:** verify the remaining shutdown limits, particularly disabled
+   timeouts, HTTP operations and consumer callbacks.
 3. **Polling:** verify idle and active polling cadence and consider a
    configurable interval.
 4. **Regression coverage:** extend local TCP tests for response validation and
@@ -204,7 +204,7 @@ they do not replace controller interlocks or other machine-safety mechanisms.
 ## Validation status
 
 - The Visual Studio workspace build succeeded. The last full library test run
-  passed 229 tests across .NET Framework 4.8, .NET 8 (using .NET Standard 2.0
+  passed 241 tests across .NET Framework 4.8, .NET 8 (using .NET Standard 2.0
   assets) and .NET 10. The last desktop test run passed 15 Windows/.NET 10 tests.
   A combined Test Explorer run reported a test-storage error after reporting
   154 passes, so the projects were verified separately.
@@ -216,3 +216,5 @@ they do not replace controller interlocks or other machine-safety mechanisms.
   by targeted transport tests on .NET Framework 4.8, .NET 8 and .NET 10.
 - Loopback tests cover input validation and maximum representable read/write
   boundaries without sending invalid requests.
+- A saturated loopback listener exercises TCP connect timeout, cleanup,
+  reconnect and zero-timeout disconnect on all three test targets.

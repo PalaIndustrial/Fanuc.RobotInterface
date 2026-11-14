@@ -6,6 +6,8 @@ using System.IO;
 using System.Linq;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Fanuc.RobotInterface
 {
@@ -14,9 +16,10 @@ namespace Fanuc.RobotInterface
         public const int DEFAULT_PORT = 60008;
         public const int DEFAULT_TIMEOUT = 10000;
 
-        // Disconnect only takes StateLock, so it can close a socket blocked in an operation.
+        // Disconnect does not take OperationLock, so it can interrupt blocked I/O.
         private readonly object OperationLock = new object();
         private readonly object StateLock = new object();
+        private readonly object ClientDisposeLock = new object();
         private TcpClient TcpClient;
         private bool ConnectionReady;
         private long ConnectionVersion;
@@ -42,6 +45,12 @@ namespace Fanuc.RobotInterface
             }
         }
 
+        /// <summary>
+        /// Connects to the controller using the timeout in milliseconds for TCP
+        /// connection and each socket send/receive. Zero disables these timeouts.
+        /// The timeout is approximate and is not an overall handshake deadline;
+        /// hostname resolution may continue after a timeout on older targets.
+        /// </summary>
         public void Connect(string host, ushort port, int timeout)
         {
             long version;
@@ -50,7 +59,6 @@ namespace Fanuc.RobotInterface
             lock (OperationLock)
             {
                 TcpClient client = null;
-                bool published = false;
                 TcpClient oldClient;
                 lock (StateLock)
                 {
@@ -65,7 +73,7 @@ namespace Fanuc.RobotInterface
                 }
                 try
                 {
-                    oldClient?.Dispose();
+                    DisposeClient(oldClient);
 
                     client = new TcpClient();
                     lock (StateLock)
@@ -73,12 +81,11 @@ namespace Fanuc.RobotInterface
                         if (version != ConnectionVersion)
                             throw new IOException("Connection was cancelled.");
                         TcpClient = client;
-                        published = true;
                     }
                     client.ReceiveTimeout = timeout;
                     client.SendTimeout = timeout;
                     client.Client.NoDelay = true;
-                    client.Connect(host, port);
+                    ConnectWithTimeout(client, host, port, timeout);
 
                     SequenceNumber = 0;
 
@@ -127,7 +134,6 @@ namespace Fanuc.RobotInterface
                 }
                 catch (Exception ex)
                 {
-                    bool dispose = !published;
                     lock (StateLock)
                     {
                         if (TcpClient == client && client != null)
@@ -135,15 +141,57 @@ namespace Fanuc.RobotInterface
                             TcpClient = null;
                             ConnectionReady = false;
                             ++ConnectionVersion;
-                            dispose = true;
                         }
                     }
-                    if (dispose)
-                        client?.Dispose();
+                    DisposeClient(client);
                     throw new IOException($"Connecting to {host}:{port} failed.", ex);
                 }
             }
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsConnected)));
+        }
+
+        private void DisposeClient(TcpClient client)
+        {
+            if (client == null)
+                return;
+            lock (ClientDisposeLock)
+                client.Dispose();
+        }
+
+        private void ConnectWithTimeout(TcpClient client, string host, int port, int timeout)
+        {
+#if NET5_0_OR_GREATER
+            using var cancellation = new CancellationTokenSource();
+            if (timeout > 0)
+                cancellation.CancelAfter(timeout);
+            try
+            {
+                client.ConnectAsync(host, port, cancellation.Token).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException ex) when (cancellation.IsCancellationRequested)
+            {
+                DisposeClient(client);
+                throw new TimeoutException($"TCP connection timed out after {timeout} ms.", ex);
+            }
+#else
+            var connect = client.ConnectAsync(host, port);
+            if (timeout > 0)
+            {
+                using var cancellation = new CancellationTokenSource();
+                var delay = Task.Delay(timeout, cancellation.Token);
+                if (Task.WhenAny(connect, delay).GetAwaiter().GetResult() != connect)
+                {
+                    // Closing the client can fault the pending operation later.
+                    _ = connect.ContinueWith(task => { _ = task.Exception; }, CancellationToken.None,
+                        TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                        TaskScheduler.Default);
+                    DisposeClient(client);
+                    throw new TimeoutException($"TCP connection timed out after {timeout} ms.");
+                }
+                cancellation.Cancel();
+            }
+            connect.GetAwaiter().GetResult();
+#endif
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -160,7 +208,7 @@ namespace Fanuc.RobotInterface
                 ConnectionReady = false;
                 ++ConnectionVersion;
             }
-            client?.Dispose();
+            DisposeClient(client);
             if (notify)
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsConnected)));
         }
@@ -713,7 +761,7 @@ namespace Fanuc.RobotInterface
                 }
                 if (dispose)
                 {
-                    try { client.Dispose(); }
+                    try { DisposeClient(client); }
                     catch (Exception cleanup)
                     {
                         throw new AggregateException("Transport operation and client cleanup failed.", failure, cleanup);

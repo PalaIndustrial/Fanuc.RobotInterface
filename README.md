@@ -77,8 +77,10 @@ to their UI thread and avoid blocking callbacks.
 Polling and initialization failures are exposed through `LastError` and
 `PropertyChanged` notifications. `Disconnect()` interrupts active socket I/O
 and waits for the watcher; a callback that blocks can still delay shutdown.
-The async methods schedule synchronous I/O and do not provide a TCP connect
-deadline or caller cancellation.
+The async methods schedule synchronous I/O. The connection timeout also applies
+to TCP connect, but is approximate and is not an overall handshake deadline.
+Zero disables the configured timeouts; hostname resolution may continue after
+a timeout on older targets. Caller cancellation is not available.
 
 Connecting `ExRobotIF` sends `CLRASG` before rebuilding its assignments. The
 effect of that command on other controller clients has not been verified. Give

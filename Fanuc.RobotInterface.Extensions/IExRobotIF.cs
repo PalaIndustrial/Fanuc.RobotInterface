@@ -39,6 +39,12 @@ namespace Fanuc.RobotInterface
         IRobotDataDictionary<int, ExRobotIF.RobotDataHolderBase<RobotTaskStatus>> PRG { get; }
         IRobotDataDictionary<int, ExRobotIF.RobotDataHolderBase<RobotAlarm>> ALM { get; }
 
+        /// <summary>
+        /// Connects using an approximate TCP connect timeout and per-send/receive
+        /// timeout in milliseconds. Zero disables these timeouts. This is not an
+        /// overall handshake deadline; hostname resolution may continue after a
+        /// timeout on older targets.
+        /// </summary>
         Task ConnectAsync(string host, ushort port, int timeout);
 
         Task<bool[]> AsyncReadDI(int index, ushort count);

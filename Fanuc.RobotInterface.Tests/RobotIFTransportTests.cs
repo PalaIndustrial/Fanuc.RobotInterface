@@ -1022,6 +1022,222 @@ public sealed class RobotIFTransportTests
         }
     }
 
+    [TestMethod]
+    public void TcpConnectTimeoutClosesAttemptAndAllowsReconnect()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        var probes = new List<TcpClient>();
+        Task? pending = null;
+        var robot = new RobotIF();
+        var noTimeout = new RobotIF();
+        var racing = new RobotIF();
+        var wrapper = new ExRobotIF(new RobotIF());
+        try
+        {
+            listener.Start(1);
+            var port = (ushort)((IPEndPoint)listener.LocalEndpoint).Port;
+            for (var i = 0; i < 32; i++)
+            {
+                var probe = new TcpClient();
+                probes.Add(probe);
+                var connect = probe.ConnectAsync(IPAddress.Loopback, port);
+                if (Task.WhenAny(connect, Task.Delay(500)).GetAwaiter().GetResult() != connect)
+                {
+                    pending = connect;
+                    break;
+                }
+                if (connect.IsFaulted || connect.IsCanceled)
+                {
+                    _ = connect.Exception;
+                    Assert.Inconclusive("This system rejects connections instead of leaving them pending when the loopback backlog fills.");
+                }
+                connect.GetAwaiter().GetResult();
+            }
+            if (pending == null)
+                Assert.Inconclusive("The loopback listener's connection backlog did not fill.");
+
+            var watch = Stopwatch.StartNew();
+            var clientField = typeof(RobotIF).GetField("TcpClient", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(clientField);
+            Socket? attemptedSocket = null;
+            var attempt = Task.Run(() => Assert.ThrowsExactly<IOException>(
+                () => robot.Connect("127.0.0.1", port, 1000)));
+            Assert.IsTrue(SpinWait.SpinUntil(() =>
+            {
+                var client = clientField.GetValue(robot) as TcpClient;
+                attemptedSocket = client?.Client;
+                return attemptedSocket != null;
+            }, 3000), "The TCP client was not published.");
+            var error = attempt.GetAwaiter().GetResult();
+            watch.Stop();
+            Assert.IsInstanceOfType<TimeoutException>(error.InnerException);
+            Assert.IsTrue(watch.ElapsedMilliseconds >= 500, $"Connection timed out too early: {watch.Elapsed}.");
+            Assert.IsTrue(watch.ElapsedMilliseconds < 5000, $"Connection timeout took too long: {watch.Elapsed}.");
+            Assert.IsFalse(robot.IsConnected);
+            Assert.IsNotNull(attemptedSocket);
+            Assert.ThrowsExactly<ObjectDisposedException>(() => _ = attemptedSocket.Available);
+
+            var wrapperError = Assert.ThrowsExactlyAsync<IOException>(
+                () => wrapper.ConnectAsync("127.0.0.1", port, 300)).GetAwaiter().GetResult();
+            Assert.IsInstanceOfType<TimeoutException>(wrapperError.InnerException);
+            Assert.IsFalse(wrapper.IsConnected);
+            Assert.IsNotNull(wrapper.LastError);
+
+            var waiting = Task.Run(() =>
+            {
+                return Assert.ThrowsExactly<IOException>(() => noTimeout.Connect("127.0.0.1", port, 0));
+            });
+            Socket? waitingSocket = null;
+            Assert.IsTrue(SpinWait.SpinUntil(() =>
+            {
+                var client = clientField.GetValue(noTimeout) as TcpClient;
+                waitingSocket = client?.Client;
+                return waitingSocket != null;
+            }, 3000), "The zero-timeout TCP client was not published.");
+            Assert.IsFalse(waiting.Wait(400), "Zero timeout should not impose a TCP connect deadline.");
+            noTimeout.Disconnect();
+            Assert.IsTrue(waiting.Wait(5000), "Disconnect did not interrupt the pending TCP connection.");
+            Assert.IsFalse(noTimeout.IsConnected);
+            Assert.IsNotNull(waitingSocket);
+            Assert.ThrowsExactly<ObjectDisposedException>(() => _ = waitingSocket.Available);
+
+            Socket? racingSocket = null;
+            var disposeField = typeof(RobotIF).GetField("ClientDisposeLock", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(disposeField);
+            var disposeLock = disposeField.GetValue(racing);
+            Assert.IsNotNull(disposeLock);
+            Task<IOException>? racingAttempt = null;
+            Task? disconnect = null;
+            Monitor.Enter(disposeLock);
+            try
+            {
+                racingAttempt = Task.Run(() => Assert.ThrowsExactly<IOException>(
+                    () => racing.Connect("127.0.0.1", port, 500)));
+                Assert.IsTrue(SpinWait.SpinUntil(() =>
+                {
+                    var client = clientField.GetValue(racing) as TcpClient;
+                    racingSocket = client?.Client;
+                    return racingSocket != null;
+                }, 3000), "The racing TCP client was not published.");
+                disconnect = Task.Run(racing.Disconnect);
+                Assert.IsTrue(SpinWait.SpinUntil(() => clientField.GetValue(racing) == null, 3000),
+                    "Disconnect did not detach the TCP client.");
+                Assert.IsFalse(racingAttempt.Wait(1500), "Connect returned before client disposal completed.");
+            }
+            finally
+            {
+                Monitor.Exit(disposeLock);
+            }
+            Assert.IsNotNull(racingAttempt);
+            Assert.IsNotNull(disconnect);
+            Assert.IsTrue(Task.WaitAll(new Task[] { racingAttempt, disconnect }, 5000));
+            Assert.IsNotNull(racingSocket);
+            Assert.ThrowsExactly<ObjectDisposedException>(() => _ = racingSocket.Available);
+
+            using var server = new TestServer(Handshake);
+            robot.Connect("127.0.0.1", server.Port, 3000);
+            Assert.IsTrue(robot.IsConnected);
+            server.Complete();
+
+            using var wrapperServer = new TestServer(socket =>
+            {
+                Handshake(socket);
+                ReadRequest(socket);
+                SendAll(socket, ResponseHeader());
+            });
+            wrapper.ConnectAsync("127.0.0.1", wrapperServer.Port, 3000).GetAwaiter().GetResult();
+            Assert.IsTrue(wrapper.IsConnected);
+            Assert.IsNull(wrapper.LastError);
+            wrapperServer.Complete();
+        }
+        finally
+        {
+            wrapper.Disconnect();
+            racing.Disconnect();
+            noTimeout.Disconnect();
+            robot.Disconnect();
+            listener.Stop();
+            foreach (var probe in probes)
+                probe.Dispose();
+            if (pending != null)
+                _ = pending.ContinueWith(task => { _ = task.Exception; }, CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+        }
+    }
+
+    [TestMethod]
+    [DataRow("127.0.0.1", 0)]
+    [DataRow("localhost", 3000)]
+    public void ConnectSupportsIpAndHostnameWithConfiguredTimeout(string host, int timeout)
+    {
+        using var server = new TestServer(Handshake);
+        var robot = new RobotIF();
+        try
+        {
+            robot.Connect(host, server.Port, timeout);
+            Assert.IsTrue(robot.IsConnected);
+            server.Complete();
+        }
+        finally
+        {
+            robot.Disconnect();
+        }
+    }
+
+    [TestMethod]
+    public void FailedHandshakeWaitsForConcurrentDisconnectDisposal()
+    {
+        using var requestReceived = new ManualResetEventSlim();
+        using var releaseResponse = new ManualResetEventSlim();
+        using var responseSent = new ManualResetEventSlim();
+        using var server = new TestServer(socket =>
+        {
+            ReadRequest(socket);
+            requestReceived.Set();
+            Assert.IsTrue(releaseResponse.Wait(5000));
+            SendAll(socket, ResponseHeader());
+            responseSent.Set();
+            Assert.AreEqual(0, socket.Receive(new byte[1]));
+        });
+        var robot = new RobotIF();
+        var clientField = typeof(RobotIF).GetField("TcpClient", BindingFlags.Instance | BindingFlags.NonPublic);
+        var disposeField = typeof(RobotIF).GetField("ClientDisposeLock", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.IsNotNull(clientField);
+        Assert.IsNotNull(disposeField);
+        var disposeLock = disposeField.GetValue(robot);
+        Assert.IsNotNull(disposeLock);
+        Task? disconnect = null;
+        var connect = Task.Run(() => Assert.ThrowsExactly<IOException>(
+            () => robot.Connect("127.0.0.1", server.Port, 3000)));
+        try
+        {
+            Assert.IsTrue(requestReceived.Wait(3000));
+            Monitor.Enter(disposeLock);
+            try
+            {
+                disconnect = Task.Run(robot.Disconnect);
+                Assert.IsTrue(SpinWait.SpinUntil(() => clientField.GetValue(robot) == null, 3000));
+                releaseResponse.Set();
+                Assert.IsTrue(responseSent.Wait(3000));
+                Assert.IsFalse(connect.Wait(500), "Connect returned before client disposal completed.");
+            }
+            finally
+            {
+                Monitor.Exit(disposeLock);
+            }
+            Assert.IsNotNull(disconnect);
+            Assert.IsTrue(Task.WaitAll(new Task[] { connect, disconnect }, 5000));
+            Assert.IsFalse(robot.IsConnected);
+            server.Complete();
+        }
+        finally
+        {
+            releaseResponse.Set();
+            robot.Disconnect();
+        }
+    }
+
     private static void Handshake(Socket socket)
     {
         ReadRequest(socket);

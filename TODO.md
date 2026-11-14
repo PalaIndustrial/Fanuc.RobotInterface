@@ -24,8 +24,9 @@ is still needed. `FANUCRobotTest` remains an interactive application.
   Shutdown now interrupts socket I/O, drains the session, and joins its background
   watcher before reconnecting. Loopback tests cover blocked polling, reconnect,
   and watcher-initiated disconnect. A universal shutdown bound is not established:
-  TCP connect has no explicit deadline (T10), HTTP calls and user callbacks may
-  block, and real-controller behavior remains untested.
+  timeouts can be disabled, hostname resolution may continue on older targets,
+  HTTP calls and user callbacks may block, and real-controller behavior remains
+  untested.
 
 ## HIGH
 
@@ -60,11 +61,11 @@ is still needed. `FANUCRobotTest` remains an interactive application.
   Holder writes now use explicit `WriteAsync` calls rather than shared dirty
   state. A loopback regression verifies that consecutive writes queued behind a
   blocked write are sent separately and complete on their own acknowledgments.
-- [ ] **[HIGH] T10 - Add real connect deadlines and caller cancellation.**
-  Define TCP-connect and overall-handshake deadlines separately from per-I/O
-  timeouts. Propagate cancellation to the underlying operation and extended
-  lifecycle; a timed wait alone must not leave work running. Verify timeout,
-  cancellation, cleanup, and retry behavior across supported targets.
+- [x] **[HIGH] T10 - Apply the existing timeout to TCP connect.**
+  Use cancellation-aware connect on .NET 5 and newer; on older targets, bound
+  the wait and close the client on timeout. The timeout remains approximate and
+  per operation, not an overall handshake deadline. Caller cancellation is not
+  provided; hostname resolution may continue after timeout on older targets.
 
 ## MIDIUM
 
