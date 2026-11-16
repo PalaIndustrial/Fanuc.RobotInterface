@@ -1,9 +1,8 @@
+using Fanuc.SRTP;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
-using Fanuc.RobotInterface;
-using Fanuc.SRTP;
 
 namespace Fanuc.RobotInterface.Tests;
 
@@ -132,6 +131,49 @@ public sealed class RobotIFHttpTests
             $"Authorization: Basic {Convert.ToBase64String(Encoding.UTF8.GetBytes("user:pass"))}",
             $"Authorization: Basic {Convert.ToBase64String(Encoding.UTF8.GetBytes("async-user:async-pass"))}"
         }, authorizationHeaders);
+    }
+
+    [TestMethod]
+#pragma warning disable MSTEST0045
+    [Timeout(15000)]
+#pragma warning restore MSTEST0045
+    public async Task AsyncHttpCommandCanBeCanceledWhileWaitingForResponse()
+    {
+        var http = new TcpListener(IPAddress.Loopback, 0);
+        using var releaseHttp = new ManualResetEventSlim();
+        var httpReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        http.Start();
+        var httpTask = Task.Run(() =>
+        {
+            using var socket = http.AcceptSocket();
+            using var stream = new NetworkStream(socket);
+            using var reader = new StreamReader(stream, Encoding.ASCII, false, 1024, leaveOpen: true);
+            Assert.AreEqual("GET /KAREL/slow HTTP/1.1", reader.ReadLine());
+            while (!string.IsNullOrEmpty(reader.ReadLine())) { }
+            httpReceived.TrySetResult(true);
+            Assert.IsTrue(releaseHttp.Wait(10000), "HTTP request was not released.");
+        });
+        var wrapper = new ExRobotIF(new RobotIF(
+            "127.0.0.1", httpPort: (ushort)((IPEndPoint)http.LocalEndpoint).Port));
+        using var cancellation = new CancellationTokenSource();
+        try
+        {
+            var request = wrapper.AsyncExecuteKarel("slow", cancellationToken: cancellation.Token);
+            await Bounded(httpReceived.Task);
+            cancellation.Cancel();
+            await Assert.ThrowsExactlyAsync<TaskCanceledException>(() => request);
+            using var alreadyCanceled = new CancellationTokenSource();
+            alreadyCanceled.Cancel();
+            Assert.ThrowsExactly<TaskCanceledException>(
+                () => wrapper.ExecuteKCL("status", cancellationToken: alreadyCanceled.Token));
+            releaseHttp.Set();
+            await Bounded(httpTask);
+        }
+        finally
+        {
+            releaseHttp.Set();
+            http.Stop();
+        }
     }
 
     [TestMethod]

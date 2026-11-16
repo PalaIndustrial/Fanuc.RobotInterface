@@ -1,4 +1,6 @@
-﻿namespace Fanuc.RobotInterface;
+﻿using System.Threading;
+
+namespace Fanuc.RobotInterface;
 
 public interface IRobotIF
 {
@@ -17,8 +19,8 @@ public interface IRobotIF
     void Disconnect();
 
     void ClearAlarm();
-    string ExecuteKCL(string command, string username = null, string password = null);
-    string ExecuteKarel(string program, string username = null, string password = null);
+    string ExecuteKCL(string command, string username = null, string password = null, CancellationToken cancellationToken = default);
+    string ExecuteKarel(string program, string username = null, string password = null, CancellationToken cancellationToken = default);
 
     #region IO
     bool[] ReadDI(int index, ushort count);
