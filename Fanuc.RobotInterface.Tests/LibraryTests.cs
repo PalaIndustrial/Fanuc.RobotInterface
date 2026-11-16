@@ -1,6 +1,5 @@
-using System.Runtime.Versioning;
-using Fanuc.RobotInterface;
 using Fanuc.SRTP;
+using System.Runtime.Versioning;
 
 namespace Fanuc.RobotInterface.Tests;
 

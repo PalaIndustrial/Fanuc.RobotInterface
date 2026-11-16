@@ -1,12 +1,12 @@
+using Fanuc.RobotInterface;
+using FANUCRobotTest.Converters;
+using FANUCRobotTest.UI;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
-using FANUCRobotTest.Converters;
-using FANUCRobotTest.UI;
-using Fanuc.RobotInterface;
 
 namespace FANUCRobotTest.Tests;
 
@@ -83,11 +83,15 @@ public sealed class ConverterTests
         BindingOperations.SetBinding(input, UIElement.IsEnabledProperty, BindingFor(new BooleanInvertConverter(), true));
         BindingOperations.SetBinding(connect, UIElement.VisibilityProperty, BindingFor(new BooleanToObjectConverter
         {
-            TrueValue = Visibility.Hidden, FalseValue = Visibility.Visible, NullValue = Visibility.Visible
+            TrueValue = Visibility.Hidden,
+            FalseValue = Visibility.Visible,
+            NullValue = Visibility.Visible
         }, Visibility.Visible));
         BindingOperations.SetBinding(disconnect, UIElement.VisibilityProperty, BindingFor(new BooleanToObjectConverter
         {
-            TrueValue = Visibility.Visible, FalseValue = Visibility.Hidden, NullValue = Visibility.Hidden
+            TrueValue = Visibility.Visible,
+            FalseValue = Visibility.Hidden,
+            NullValue = Visibility.Hidden
         }, Visibility.Hidden));
         BindingOperations.SetBinding(alarm, UIElement.IsEnabledProperty, BindingFor(fallback: false));
 

@@ -1,11 +1,11 @@
+using Fanuc.RobotInterface;
+using FANUCRobotTest.UI;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using FANUCRobotTest.UI;
-using Fanuc.RobotInterface;
 
 namespace FANUCRobotTest.Tests;
 

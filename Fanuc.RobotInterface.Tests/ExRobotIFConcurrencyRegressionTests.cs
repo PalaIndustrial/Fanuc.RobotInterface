@@ -1,8 +1,6 @@
-using System.IO;
+using Fanuc.SRTP;
 using System.Net;
 using System.Net.Sockets;
-using Fanuc.RobotInterface;
-using Fanuc.SRTP;
 
 #pragma warning disable MSTEST0045 // Bound synchronous socket operations that cannot cooperate with cancellation.
 

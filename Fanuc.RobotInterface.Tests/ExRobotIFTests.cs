@@ -1,7 +1,6 @@
+using Fanuc.SRTP;
 using System.Net;
 using System.Net.Sockets;
-using Fanuc.RobotInterface;
-using Fanuc.SRTP;
 
 namespace Fanuc.RobotInterface.Tests;
 

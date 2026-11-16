@@ -1,9 +1,8 @@
+using Fanuc.SRTP;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using Fanuc.RobotInterface;
-using Fanuc.SRTP;
 
 namespace Fanuc.RobotInterface.Tests;
 

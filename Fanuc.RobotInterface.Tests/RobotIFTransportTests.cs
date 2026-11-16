@@ -1,9 +1,8 @@
+using Fanuc.SRTP;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
-using Fanuc.RobotInterface;
-using Fanuc.SRTP;
 
 namespace Fanuc.RobotInterface.Tests;
 
@@ -870,7 +869,8 @@ public sealed class RobotIFTransportTests
             started.Set();
             try { robot.WriteCommand("QUEUED"); }
             catch (Exception ex) { error = ex; }
-        }) { IsBackground = true };
+        })
+        { IsBackground = true };
         try
         {
             var connect = Task.Run(() => robot.Connect(3000));
@@ -916,7 +916,8 @@ public sealed class RobotIFTransportTests
             started.Set();
             try { robot.Connect(3000); }
             catch (Exception ex) { error = ex; }
-        }) { IsBackground = true };
+        })
+        { IsBackground = true };
         try
         {
             var first = Task.Run(() => robot.Connect(3000));
@@ -966,7 +967,8 @@ public sealed class RobotIFTransportTests
             queuedStarted.Set();
             try { robot.WriteCommand("QUEUED"); }
             catch (Exception ex) { queuedError = ex; }
-        }) { IsBackground = true };
+        })
+        { IsBackground = true };
         try
         {
             robot.Connect(30000);
