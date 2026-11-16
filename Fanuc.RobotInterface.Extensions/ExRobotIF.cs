@@ -444,11 +444,13 @@ namespace Fanuc.RobotInterface
         /// <summary>
         /// Executes a KCL command on a worker thread independently of the SRTP session.
         /// </summary>
-        public Task<string> AsyncExecuteKCL(string command) => Task.Run(() => _Robot.ExecuteKCL(command));
+        public Task<string> AsyncExecuteKCL(string command, string username = null, string password = null) =>
+            Task.Run(() => _Robot.ExecuteKCL(command, username, password));
         /// <summary>
         /// Invokes a Karel program on a worker thread independently of the SRTP session.
         /// </summary>
-        public Task<string> AsyncExecuteKarel(string program) => Task.Run(() => _Robot.ExecuteKarel(program));
+        public Task<string> AsyncExecuteKarel(string program, string username = null, string password = null) =>
+            Task.Run(() => _Robot.ExecuteKarel(program, username, password));
 
         private static T[] Snapshot<T>(T[] values) => values == null ? null : (T[])values.Clone();
     }

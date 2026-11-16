@@ -103,7 +103,10 @@ availability depends on the controller's HTTP configuration. Their HTTP timeout
 is independent of the SRTP timeout. Each `RobotIF` lazily creates and reuses
 its own HTTP client; its disposal lifecycle remains to be defined.
 The wrapper's async HTTP helpers run on worker threads and do not require or
-depend on an SRTP session; disconnecting SRTP does not cancel them.
+depend on an SRTP session; disconnecting SRTP does not cancel them. Both methods
+accept optional `username` and `password` arguments for HTTP Basic authentication;
+provide both or neither. Basic authentication over HTTP does not encrypt
+credentials, so use it only on a trusted network.
 
 Connecting `ExRobotIF` sends `CLRASG` before rebuilding its assignments. The
 effect of that command on other controller clients has not been verified. Give

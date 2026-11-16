@@ -17,8 +17,8 @@ public interface IRobotIF
     void Disconnect();
 
     void ClearAlarm();
-    string ExecuteKCL(string command);
-    string ExecuteKarel(string program);
+    string ExecuteKCL(string command, string username = null, string password = null);
+    string ExecuteKarel(string program, string username = null, string password = null);
 
     #region IO
     bool[] ReadDI(int index, ushort count);

@@ -61,7 +61,7 @@ namespace Fanuc.RobotInterface
         Task AsyncWriteCommand(string command);
 
         Task<int> AsyncWriteAssignment(int length, string target);
-        Task<string> AsyncExecuteKCL(string command);
-        Task<string> AsyncExecuteKarel(string program);
+        Task<string> AsyncExecuteKCL(string command, string username = null, string password = null);
+        Task<string> AsyncExecuteKarel(string program, string username = null, string password = null);
     }
 }

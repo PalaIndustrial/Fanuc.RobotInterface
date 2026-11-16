@@ -59,8 +59,10 @@ namespace Fanuc.RobotInterface
         }
 
         public void ClearAlarm() => _InvokeIfConnected(CaptureReadySession(), () => { _Robot.ClearAlarm(); return true; }).GetAwaiter().GetResult();
-        public string ExecuteKCL(string command) => _Robot.ExecuteKCL(command);
-        public string ExecuteKarel(string program) => _Robot.ExecuteKarel(program);
+        public string ExecuteKCL(string command, string username = null, string password = null) =>
+            _Robot.ExecuteKCL(command, username, password);
+        public string ExecuteKarel(string program, string username = null, string password = null) =>
+            _Robot.ExecuteKarel(program, username, password);
 
         public bool[] ReadDI(int index, ushort count) => AsyncReadDI(index, count).GetAwaiter().GetResult();
         public bool[] ReadDO(int index, ushort count) => AsyncReadDO(index, count).GetAwaiter().GetResult();

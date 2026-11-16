@@ -109,6 +109,32 @@ public sealed class RobotIFHttpTests
     }
 
     [TestMethod]
+    public async Task HttpCommandsSendBasicCredentialsPerRequest()
+    {
+        using var http = new HttpServer(
+            ("/KCL/status", "<BODY><XMP>OK</XMP></BODY>"),
+            ("/KAREL/demo", "KAREL result"),
+            ("/KCL/public", "<BODY><XMP>Public</XMP></BODY>"));
+        var robot = new RobotIF("127.0.0.1", httpPort: http.Port);
+        IRobotIF api = robot;
+        var wrapper = new ExRobotIF(robot);
+
+        Assert.AreEqual("OK", api.ExecuteKCL("status", "user", "pass"));
+        Assert.AreEqual("KAREL result", await wrapper.AsyncExecuteKarel("demo", "async-user", "async-pass"));
+        Assert.AreEqual("Public", api.ExecuteKCL("public"));
+        await http.Complete();
+
+        var authorizationHeaders = http.Headers
+            .Where(line => line.StartsWith("Authorization:", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        CollectionAssert.AreEqual(new[]
+        {
+            $"Authorization: Basic {Convert.ToBase64String(Encoding.UTF8.GetBytes("user:pass"))}",
+            $"Authorization: Basic {Convert.ToBase64String(Encoding.UTF8.GetBytes("async-user:async-pass"))}"
+        }, authorizationHeaders);
+    }
+
+    [TestMethod]
 #pragma warning disable MSTEST0045
     [Timeout(15000)]
 #pragma warning restore MSTEST0045
